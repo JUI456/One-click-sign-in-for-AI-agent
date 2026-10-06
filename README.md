@@ -68,6 +68,8 @@ launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.ser
 - **开**：双击 `open-panel.command`（任意时刻都能起，轻量模式）。
 - **关**：在网页里点右上角「⏻ 停止服务」，或直接关闭网页（空闲 30 分钟后自动关）。
 
+> 注：「⏻ 停止服务」按钮**仅对轻量模式有效**。若处于常驻模式（plist 带 `KeepAlive`），服务停止后会被 launchd 立即重启，按钮会提示“仍被自动重启”；彻底停止常驻需先关闭/移除该 plist 再注销重启。另外，按钮依赖后端 `/api/shutdown` 接口，需服务器加载了含该接口的新代码（注销/重启后）才生效——旧代码上点它会提示“停止失败”。
+
 ### 可选·常驻模式：开机自启、随时可访问
 
 若你更想要“网页永远开着就能访问”，把上面的轻量 plist 换成常驻版（加回 `RunAtLoad` + `KeepAlive`）：
