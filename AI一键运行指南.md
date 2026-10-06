@@ -58,6 +58,10 @@ echo $! > server.pid
 sleep 1.5
 ```
 
+> 默认常驻。若要**轻量模式**（空闲自动关、平时不占资源、不耗电），改用：
+> `nohup python3 server.py --idle-shutdown 30 > server.log 2>&1 &`
+> 轻量模式下，浏览器关闭约 30 分钟后服务自动退出；也可在网页点「⏻ 停止服务」立即关。
+
 判定服务已起：
 
 ```bash
@@ -118,6 +122,7 @@ curl -s http://127.0.0.1:8787/api/history | python3 -m json.tool
 | `needs_pat` | `true` 表示 Qoder 缺 PAT |
 | `checked_in_today` | 当天是否已签 |
 | `ok` | 本次拉取是否成功 |
+| `mode` | 运行模式：`{"idle_timeout": 秒, "resident": true/false}`。`idle_timeout>0` 为轻量模式（空闲自动关），`resident:true` 为常驻 |
 
 ---
 
@@ -177,22 +182,31 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
   -d '{"qoder_region":"china","auto_checkin_on_open":false}'
 ```
 
+新增端点（与轻量模式相关）：
+
+| 端点 | 说明 |
+|---|---|
+| `POST /api/shutdown` | 优雅停止服务（轻量模式的“关”开关；停止后需重新启动才能访问） |
+| `GET /api/info` | 返回 `{"idle_timeout": 秒, "resident": bool, "uptime": 秒}` |
+| `/api/status` 的 `mode` 字段 | 同上 `idle_timeout` / `resident`，便于前端展示当前模式 |
+
 ---
 
 ## 7. 安装自动签到 + 开机自启服务（推荐，设一次彻底免操作）
 
-安装两个 launchd 任务：
+安装两个 launchd 任务（**默认轻量模式，不常驻**）：
 
 1. **每日 09:30 自动签到**：到点自动跑 `server.py --checkin-now`，连网页都不用开。
-2. **服务开机自启并常驻**：登录后自动启动 `server.py`，网页 `http://127.0.0.1:8787` 永远可访问。
+2. **服务每天 09:32 轻量自启**：自动起一次服务（`--idle-shutdown 60`，约 1 小时后自动关），方便早上看一眼当天结果；平时不在后台常驻。
 
-> ⚠️ 项目自带的 `com.user.checkin-panel.plist` 写死了原作者的用户名和 python 路径，**不要直接 `cp`**。下面脚本按当前机器动态生成。
+> ⚠️ 项目自带的 `com.user.checkin-panel.plist` / `com.user.checkin-panel.server.plist` 写死了原作者的用户名和 python 路径，**不要直接 `cp`**。下面脚本按当前机器动态生成。
 > **激活方式（实测）**：在本机 macOS 上，`launchctl bootstrap` 与 `launchctl load` 注册到 `gui/$UID` 都会报 `Bootstrap failed: 5: Input/output error`（即使 plist 经 `plutil -lint` 校验合法）。**不要依赖 bootstrap**——把 plist 放进 `~/Library/LaunchAgents/` 后，**注销并重新登录（或重启）一次**，macOS 会自动加载，最可靠。下面的 bootstrap 命令仅在你本机不报该错误时才需要。
 
 ```bash
 PY=$(command -v python3)
 AGENTS="$HOME/Library/LaunchAgents"
 PLIST_SRC="$PROJECT_DIR/com.user.checkin-panel.plist"
+SERVER_SRC="$PROJECT_DIR/com.user.checkin-panel.server.plist"
 CHECKIN_DST="$AGENTS/com.user.checkin-panel.plist"
 SERVER_DST="$AGENTS/com.user.checkin-panel.server.plist"
 
@@ -201,36 +215,37 @@ sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DI
     -e "s#/opt/homebrew/bin/python3#$PY#g" \
     "$PLIST_SRC" > "$CHECKIN_DST"
 
-# 2) 服务开机自启 plist（RunAtLoad + KeepAlive）
-cat > "$SERVER_DST" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.checkin-panel.server</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>PY</string>
-        <string>PROJ/server.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/tmp/checkin-panel-server.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/checkin-panel-server.log</string>
-</dict>
-</plist>
-EOF
-sed -i '' -e "s#PY#$PY#g" -e "s#PROJ#$PROJECT_DIR#g" "$SERVER_DST"
+# 2) 轻量服务 plist（基于项目模板替换本机路径；无 KeepAlive/RunAtLoad → 仅每日 09:32 短暂启动）
+sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DIR#g" \
+    -e "s#/opt/homebrew/bin/python3#$PY#g" \
+    "$SERVER_SRC" > "$SERVER_DST"
 
 # 3) 立即生效（需在本机 GUI 会话的终端里执行；若报 I/O error 就注销/重启一次，plist 会自动加载）
 UID=$(id -u)
 launchctl bootstrap "gui/$UID" "$CHECKIN_DST" 2>/dev/null || echo "checkin bootstrap 失败：请在本机终端执行，或注销后自动生效"
 launchctl bootstrap "gui/$UID" "$SERVER_DST" 2>/dev/null || echo "server bootstrap 失败：请在本机终端执行，或注销后自动生效"
+```
+
+> **可选·常驻模式**：若想“网页永远可访问”，把第 2 步改为生成带 `RunAtLoad`+`KeepAlive` 的 plist（见下文）。从常驻切回轻量：覆盖为轻量 plist 后注销/重启，并在网页点「⏻ 停止服务」关掉当前常驻进程。
+
+```bash
+# 常驻版服务 plist（RunAtLoad + KeepAlive）
+PY=$(command -v python3)
+SERVER_DST="$HOME/Library/LaunchAgents/com.user.checkin-panel.server.plist"
+cat > "$SERVER_DST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.user.checkin-panel.server</string>
+    <key>ProgramArguments</key><array><string>$PY</string><string>$PROJECT_DIR/server.py</string></array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/tmp/checkin-panel-server.log</string>
+    <key>StandardErrorPath</key><string>/tmp/checkin-panel-server.log</string>
+</dict>
+</plist>
+EOF
 ```
 
 校验：

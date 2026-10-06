@@ -2,9 +2,12 @@
 """AI 平台每日签到面板 — WorkBuddy / TRAE / Qoder 一键签到 + 积分总览。
 
 用法:
-  python3 server.py                # 启动 Web 面板 (默认 http://127.0.0.1:8787)
-  python3 server.py --checkin-now  # 无界面执行一次签到(供定时任务调用)后退出
-  python3 server.py --port 9000    # 指定端口
+  python3 server.py                          # 启动 Web 面板 (默认 http://127.0.0.1:8787，常驻)
+  python3 server.py --idle-shutdown 30       # 轻量模式：启动后空闲 30 分钟自动关闭（平时不常驻）
+  python3 server.py --open                   # 启动并自动打开浏览器
+  python3 server.py --resident               # 显式常驻（同默认）
+  python3 server.py --checkin-now            # 无界面执行一次签到(供定时任务调用)后退出
+  python3 server.py --port 9000              # 指定端口
 """
 
 import json
@@ -13,9 +16,11 @@ import random
 import re
 import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+import webbrowser
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -42,6 +47,14 @@ DEFAULT_CONFIG = {
 }
 
 ctx = ssl.create_default_context()
+
+# ===== 运行模式（轻量 / 常驻）=====
+# 轻量模式：IDLE_TIMEOUT>0，空闲超过该秒数自动关闭（平时不常驻，只在签到前后/按需短暂运行）
+# 常驻模式：IDLE_TIMEOUT=0，一直运行（开机自启、随时可访问）
+IDLE_TIMEOUT = 0
+LAST_ACTIVITY = {"t": 0}  # 最近一次客户端请求时间，用于空闲判定
+BOOT_TIME = 0
+RESIDENT = True
 
 
 def today_str():
@@ -687,6 +700,7 @@ def collect_status(cfg=None):
         "total": total_today,
         "by_platform": {k: round(v, 4) for k, v in used_today.items()},
     }
+    out["mode"] = {"idle_timeout": IDLE_TIMEOUT, "resident": RESIDENT}
     STATE_PATH.write_text(json.dumps(out, ensure_ascii=False, indent=1))
     return out
 
@@ -766,6 +780,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False).encode())
 
     def do_GET(self):
+        LAST_ACTIVITY["t"] = time.time()  # 任意请求都视为有活动（含浏览器每 5 分钟自动刷新）
         if self.path in ("/", "/index.html"):
             self._send(200, INDEX_PATH.read_bytes(), "text/html; charset=utf-8")
         elif self.path == "/api/status":
@@ -782,10 +797,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, p.read_bytes(), "image/svg+xml")
             else:
                 self._json({"error": "not found"}, 404)
+        elif self.path == "/api/info":
+            self._json({"idle_timeout": IDLE_TIMEOUT, "resident": RESIDENT,
+                        "uptime": int(time.time() - BOOT_TIME) if BOOT_TIME else 0})
         else:
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        LAST_ACTIVITY["t"] = time.time()
         length = int(self.headers.get("Content-Length") or 0)
         body = {}
         if length:
@@ -824,23 +843,69 @@ class Handler(BaseHTTPRequestHandler):
             save_config(cfg)
             self._json({"ok": True, "configured": {
                 "trae": bool(cfg["trae_session"]), "qoder": bool(cfg["qoder_pat"])}})
+        elif self.path == "/api/shutdown":
+            # 一键停止（轻量模式的“关”）：先回包再关服务，避免连接半开
+            self._json({"ok": True, "message": "服务已停止"})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+            return
         else:
             self._json({"error": "not found"}, 404)
 
 
+def _parse_mode_args():
+    """解析运行模式参数，返回 (idle_seconds, resident, open_browser, port)。"""
+    idle = 0
+    resident = False
+    open_browser = False
+    port = DEFAULT_CONFIG["port"]
+    if "--resident" in sys.argv:
+        resident = True
+    if "--open" in sys.argv:
+        open_browser = True
+    if "--idle-shutdown" in sys.argv:
+        try:
+            idle = int(sys.argv[sys.argv.index("--idle-shutdown") + 1]) * 60
+        except (ValueError, IndexError):
+            idle = 0
+    if "--port" in sys.argv:
+        try:
+            port = int(sys.argv[sys.argv.index("--port") + 1])
+        except (ValueError, IndexError):
+            pass
+    return idle, resident, open_browser, port
+
+
 def main():
+    global IDLE_TIMEOUT, RESIDENT, BOOT_TIME
     if "--checkin-now" in sys.argv:
         rec = run_checkin(source="cron")
         print(json.dumps(rec, ensure_ascii=False, indent=1))
         return
-    port = DEFAULT_CONFIG["port"]
-    if "--port" in sys.argv:
-        port = int(sys.argv[sys.argv.index("--port") + 1])
+    idle, resident, open_browser, port = _parse_mode_args()
+    IDLE_TIMEOUT = idle
+    RESIDENT = resident or idle == 0  # 没给 --idle-shutdown 也没给 --resident → 默认常驻
     cfg = load_config()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"签到面板已启动: http://127.0.0.1:{port}")
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    LAST_ACTIVITY["t"] = time.time()
+    BOOT_TIME = time.time()
+    tag = f"轻量模式（空闲 {idle // 60} 分钟自动关闭）" if idle > 0 else "常驻模式"
+    print(f"签到面板已启动: http://127.0.0.1:{port} · {tag}")
+    if open_browser:
+        try:
+            webbrowser.open(f"http://127.0.0.1:{port}/")
+        except Exception:
+            pass
+    if IDLE_TIMEOUT > 0:
+        def _watchdog():
+            while True:
+                time.sleep(30)
+                if time.time() - LAST_ACTIVITY["t"] > IDLE_TIMEOUT:
+                    print("空闲超时，自动关闭面板服务（轻量模式）")
+                    httpd.shutdown()
+                    break
+        threading.Thread(target=_watchdog, daemon=True).start()
     try:
-        server.serve_forever()
+        httpd.serve_forever()
     except KeyboardInterrupt:
         pass
 

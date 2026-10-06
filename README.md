@@ -44,7 +44,33 @@ launchctl bootout "gui/$UID/com.user.checkin-panel" 2>/dev/null
 rm ~/Library/LaunchAgents/com.user.checkin-panel.plist
 ```
 
-### 方式二：服务开机自启（登录后网页永远可访问，不用手动起服务）
+### 默认·轻量模式：只在签到前后短暂运行，平时不常驻
+
+面板服务**默认不再常驻后台**（解决“一直挂后台费电/占资源”的顾虑）。两种触发方式：
+
+1. **按需打开（推荐，一键）**：双击项目里的 `open-panel.command`（macOS 会在终端里运行它）。它会：若面板已在运行就直接打开浏览器；否则以「空闲 30 分钟自动关闭」启动并打开浏览器。关闭网页约 30 分钟后服务自动退出，几乎不占资源、不耗电。
+2. **每日签到后短暂自启**：安装下面的轻量 plist，每天 09:32 自动起一次服务（`--idle-shutdown 60`，约 1 小时后自动关），方便你早上看一眼当天签到结果。
+
+```bash
+# 轻量版服务 plist（无 KeepAlive、无 RunAtLoad → 不常驻，仅每日 09:32 短暂启动）
+PY=$(command -v python3)
+sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DIR#g" \
+    -e "s#/opt/homebrew/bin/python3#$PY#g" \
+    com.user.checkin-panel.server.plist > ~/Library/LaunchAgents/com.user.checkin-panel.server.plist
+UID=$(id -u)
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.server.plist 2>/dev/null || echo "请在本机终端执行，或注销后自动生效"
+```
+
+> 小提示：plist 放进 `~/Library/LaunchAgents/` 后，**下次登录会自动加载**，不手动 bootstrap 也行（直接注销/重启一次最省事）。若 `bootstrap` 报 `Bootstrap failed: 5: Input/output error`，忽略即可，注销/重启后 LaunchAgents 仍会自动加载。
+
+### 一键开关（开 / 关）
+
+- **开**：双击 `open-panel.command`（任意时刻都能起，轻量模式）。
+- **关**：在网页里点右上角「⏻ 停止服务」，或直接关闭网页（空闲 30 分钟后自动关）。
+
+### 可选·常驻模式：开机自启、随时可访问
+
+若你更想要“网页永远开着就能访问”，把上面的轻量 plist 换成常驻版（加回 `RunAtLoad` + `KeepAlive`）：
 
 ```bash
 PY=$(command -v python3)
@@ -63,14 +89,15 @@ UID=$(id -u)
 launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.server.plist 2>/dev/null || echo "请在本机终端执行，或注销后自动生效"
 ```
 
-> 小提示：plist 放进 `~/Library/LaunchAgents/` 后，**下次登录会自动加载**，不手动 bootstrap 也行（直接注销/重启一次最省事）。
+> 从旧版（常驻）切换到轻量：先把轻量 plist 覆盖到 `~/Library/LaunchAgents/`，再注销/重启一次让新配置生效；当前已在跑的常驻进程可点网页「⏻ 停止服务」立即关掉。
 
 另外：打开面板页面时，如有平台当天未签到会**自动补签**。
 
 ## 文件说明
 
-- `server.py` — 面板服务（纯 Python 标准库，无依赖），只监听 127.0.0.1
+- `server.py` — 面板服务（纯 Python 标准库，无依赖），只监听 127.0.0.1。运行模式：`--idle-shutdown N`（轻量，空闲 N 分钟自动关）、`--resident`（常驻）、`--open`（启动并开浏览器）、`--checkin-now`（仅签到后退出）
 - `index.html` — 前端页面
+- `open-panel.command` — 一键打开面板的启动脚本（macOS 双击即用，轻量模式）
 - `link.svg` — 页面 favicon（链接图标；由原 `苹果.svg` 替换而来，服务端仅白名单放行此文件，避免泄露 `config.json` 等同目录密钥）
 - `config.json` — 凭据保存处（权限 600，仅本机可读；请勿外传）
 - `history.json` — 签到历史；`last_status.json` — 最近一次状态缓存；`daily_baseline.json` — 每日消耗基线（用于统计今日总消耗，运行时生成）
