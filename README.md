@@ -63,11 +63,15 @@ launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.ser
 
 > 小提示：plist 放进 `~/Library/LaunchAgents/` 后，**下次登录会自动加载**，不手动 bootstrap 也行（直接注销/重启一次最省事）。若 `bootstrap` 报 `Bootstrap failed: 5: Input/output error`，忽略即可，注销/重启后 LaunchAgents 仍会自动加载。
 
-### 一键开关（开 / 关）
+### 一键开关（开 / 关）+ 模式切换
 
-- **开**：双击 `open-panel.command`（任意时刻都能起，轻量模式）。
+- **开**：双击 `open-panel.command`（任意时刻都能起，默认轻量模式）。
 - **关（方式一·自动）**：关闭或隐藏网页标签页，约 1 分钟后服务自动退出（页面可见时心跳保活，关标签页后心跳停止 → 空闲阈值到 → 自动关停，即“关标签页即停”）。
 - **关（方式二·手动）**：在网页里点右上角「⏻ 停止服务」立即关闭。
+- **模式切换（轻量 ⇄ 常驻）**：网页右上角有「🍃 轻量 / 🔒 常驻」按钮，点一下即可在两种模式间实时切换，**无需重启**：
+  - **轻量**（默认）：关标签页即停，平时不占资源、不耗电。
+  - **常驻**：切到此后，即使关闭/隐藏标签页服务也一直运行，链接随时可访问（适合“想常驻、每次点链接都能进”的场景）。
+  - 切换是运行时生效的；若重启服务（或重启电脑），会回到默认的轻量模式。
 
 > 关于“关标签页即停”的几个要点：
 > - **刷新网页不会误杀服务**：刷新时旧页面卸载、新页面加载，重载间隙很短（远小于 1 分钟空闲阈值），新页面加载即上报心跳，服务保持存活。
@@ -101,7 +105,7 @@ launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.ser
 
 ## 文件说明
 
-- `server.py` — 面板服务（纯 Python 标准库，无依赖），只监听 127.0.0.1。运行模式：`--idle-shutdown N`（轻量，空闲 N 分钟自动关）、`--resident`（常驻）、`--open`（启动并开浏览器）、`--checkin-now`（仅签到后退出）
+- `server.py` — 面板服务（纯 Python 标准库，无依赖），只监听 127.0.0.1。运行模式：`--idle-shutdown N`（轻量，空闲 N 分钟自动关）、`--resident`（常驻）、`--open`（启动并开浏览器）、`--checkin-now`（仅签到后退出）。运行时也可在网页点「🍃 轻量 / 🔒 常驻」按钮实时切换模式（无需重启）。
 - `index.html` — 前端页面
 - `open-panel.command` — 一键打开面板的启动脚本（macOS 双击即用，轻量模式）
 - `link.svg` — 页面 favicon（链接图标；由原 `苹果.svg` 替换而来，服务端仅白名单放行此文件，避免泄露 `config.json` 等同目录密钥）

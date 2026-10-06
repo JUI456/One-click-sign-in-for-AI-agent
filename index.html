@@ -115,6 +115,7 @@
     <div class="top-actions">
       <button class="btn-ghost" id="btn-refresh" onclick="manualRefresh(this)">🔄 刷新</button>
       <button class="btn-ghost" onclick="openSettings()">⚙️ 设置</button>
+      <button class="btn-ghost" id="btn-mode" onclick="toggleMode()" title="切换轻量/常驻：轻量=关标签页即停；常驻=关了也能随时进">模式: —</button>
       <button class="btn-ghost" id="btn-stop" onclick="stopServer()">⏻ 停止服务</button>
       <button class="btn-main" id="btn-all" onclick="checkinAll()">⚡ 一键签到</button>
     </div>
@@ -219,6 +220,15 @@ function render() {
       : (status.mode.idle_timeout ? ` · 轻量模式(${Math.round(status.mode.idle_timeout / 60)}分钟空闲自动关)` : ' · 轻量模式');
   }
   el('update-time').textContent = status ? ' · 更新于 ' + status.time + modeTxt : '';
+  // 模式切换按钮：实时反映当前模式，点击在“轻量/常驻”间切换
+  const mb = el('btn-mode');
+  if (status && status.mode) {
+    mb.textContent = status.mode.resident ? '🔒 常驻' : '🍃 轻量';
+    mb.style.opacity = '1';
+  } else {
+    mb.textContent = '模式: —';
+    mb.style.opacity = '.6';
+  }
   const cards = el('cards'); cards.innerHTML = '';
   let sum = 0, hasCredits = false, checked = 0, checkable = 0;
   let soonest = null, soonestName = '', expiring7 = [], expiring3 = 0;
@@ -383,6 +393,20 @@ async function stopServer() {
   } catch (e) {
     toast('服务已停止（轻量模式：已关闭）', 4000);
   }
+}
+
+async function toggleMode() {
+  if (!status || !status.mode) { toast('状态未加载，稍候再试'); return; }
+  const wantResident = !status.mode.resident;  // 当前轻量→切常驻；当前常驻→切轻量
+  try {
+    const r = await (await fetch('/api/mode', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({resident: wantResident})})).json();
+    if (!r.ok) { toast('切换失败: ' + (r.error || '未知'), 4000); return; }
+    status = await (await fetch('/api/status')).json();
+    render();
+    toast(wantResident
+      ? '已切换为「常驻」：关闭标签页也会保持运行，链接随时可访问'
+      : '已切换为「轻量」：关闭/隐藏标签页约 1 分钟后自动关停', 4500);
+  } catch (e) { toast('切换失败: ' + e.message); }
 }
 
 function fmtResult(k, v) {

@@ -55,6 +55,7 @@ IDLE_TIMEOUT = 0
 LAST_ACTIVITY = {"t": 0}  # 最近一次客户端请求时间，用于空闲判定
 BOOT_TIME = 0
 RESIDENT = True
+LIGHTWEIGHT_IDLE_SECONDS = 60  # 轻量模式下“关标签页即停”的空闲阈值（秒），运行时切回轻量用此值
 
 
 def today_str():
@@ -810,6 +811,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        global IDLE_TIMEOUT, RESIDENT
         LAST_ACTIVITY["t"] = time.time()
         length = int(self.headers.get("Content-Length") or 0)
         body = {}
@@ -849,6 +851,21 @@ class Handler(BaseHTTPRequestHandler):
             save_config(cfg)
             self._json({"ok": True, "configured": {
                 "trae": bool(cfg["trae_session"]), "qoder": bool(cfg["qoder_pat"])}})
+        elif self.path == "/api/mode":
+            # 运行时切换运行模式：resident=true→常驻（IDLE_TIMEOUT=0，关标签页也保持运行）；
+            # resident=false→轻量（关标签页即停，空闲 LIGHTWEIGHT_IDLE_SECONDS 后自关）。
+            # 切换立即生效，无需重启；看门狗线程始终运行并按当前 IDLE_TIMEOUT 判定。
+            want = body.get("resident")
+            if want is True:
+                IDLE_TIMEOUT = 0
+                RESIDENT = True
+            elif want is False:
+                IDLE_TIMEOUT = LIGHTWEIGHT_IDLE_SECONDS
+                RESIDENT = False
+            else:
+                self._json({"error": "resident 必须是 true/false"}, 400)
+                return
+            self._json({"ok": True, "mode": {"idle_timeout": IDLE_TIMEOUT, "resident": RESIDENT}})
         elif self.path == "/api/shutdown":
             # 一键停止（轻量模式的“关”）：先回包再关服务，避免连接半开
             self._json({"ok": True, "message": "服务已停止"})
@@ -901,15 +918,16 @@ def main():
             webbrowser.open(f"http://127.0.0.1:{port}/")
         except Exception:
             pass
-    if IDLE_TIMEOUT > 0:
-        def _watchdog():
-            while True:
-                time.sleep(30)
-                if time.time() - LAST_ACTIVITY["t"] > IDLE_TIMEOUT:
-                    print("空闲超时，自动关闭面板服务（轻量模式）")
-                    httpd.shutdown()
-                    break
-        threading.Thread(target=_watchdog, daemon=True).start()
+    # 看门狗始终运行；仅当 IDLE_TIMEOUT>0（轻量模式）时才在空闲超时后关停。
+    # 这样无论以哪种模式启动，运行时都能通过 /api/mode 在“轻量/常驻”间切换。
+    def _watchdog():
+        while True:
+            time.sleep(30)
+            if IDLE_TIMEOUT > 0 and time.time() - LAST_ACTIVITY["t"] > IDLE_TIMEOUT:
+                print("空闲超时，自动关闭面板服务（轻量模式）")
+                httpd.shutdown()
+                break
+    threading.Thread(target=_watchdog, daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

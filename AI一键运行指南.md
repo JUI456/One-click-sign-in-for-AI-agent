@@ -61,6 +61,8 @@ sleep 1.5
 > 默认常驻。若要**轻量模式**（关标签页即停、平时不占资源、不耗电），改用：
 > `nohup python3 server.py --idle-shutdown 1 > server.log 2>&1 &`
 > 轻量模式下，网页可见时心跳保活，**关闭/隐藏标签页约 1 分钟后服务自动退出**（刷新不会误杀）；也可在网页点「⏻ 停止服务」立即关。
+>
+> **运行时切换**：无论以哪种模式启动，都可在网页右上角点「🍃 轻量 / 🔒 常驻」按钮实时切换（接口 `POST /api/mode`），无需重启——想常驻时切到「🔒 常驻」即可让链接随时可访问，想省资源再切回「🍃 轻量」。
 
 判定服务已起：
 
@@ -189,6 +191,7 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
 | `POST /api/shutdown` | 优雅停止服务（轻量模式的“关”开关；停止后需重新启动才能访问） |
 | `GET /api/info` | 返回 `{"idle_timeout": 秒, "resident": bool, "uptime": 秒}` |
 | `GET /api/heartbeat` | 心跳保活（前端页面可见时每 15 秒上报一次），仅刷新 `LAST_ACTIVITY`；用于轻量模式“关标签页即停” |
+| `POST /api/mode` | 运行时切换模式：`{"resident": true}` → 常驻（关标签页也保持运行）；`{"resident": false}` → 轻量（关标签页即停）。立即生效，无需重启；前端「🍃 轻量 / 🔒 常驻」按钮即调用它 |
 | `/api/status` 的 `mode` 字段 | 同上 `idle_timeout` / `resident`，便于前端展示当前模式 |
 
 ---
