@@ -2,6 +2,64 @@
 
 本地 Web 面板：一个页面一键签到三个平台，显示各平台剩余积分、资源包明细、到期时间，以及**今日总消耗积分**与**三平台消耗占比**（基于每日用量基线差值统计）。
 
+## 系统流程
+
+```mermaid
+flowchart TD
+    subgraph 触发方式
+        A1["🀄 LaunchAgent 09:30<br/>--checkin-now（后台静默）"]
+        A2["🖱 双击 open-panel.command<br/>--idle-shutdown 1（轻量）"]
+        A3["💻 手动 python3 server.py<br/>（默认常驻）"]
+    end
+
+    subgraph 服务端
+        B["server.py 启动<br/>监听 127.0.0.1:8787"]
+        B1["签到流程 run_checkin()"]
+        B2["状态采集 collect_status()"]
+        B3{"模式判定"}
+        B4["轻量：空闲超时自关"]
+        B5["常驻：一直运行"]
+    end
+
+    subgraph 签到逻辑
+        C1["WorkBuddy<br/>读本地客户端凭据<br/>→ 调 API 签到"]
+        C2["TRAE<br/>读 config / 自愈 Cookie<br/>→ 换 JWT → 调 API 签到"]
+        C3["Qoder<br/>读 config PAT<br/>→ 换 Token → 调 API 领取"]
+    end
+
+    subgraph 前端页面
+        D1["打开浏览器访问 127.0.0.1:8787"]
+        D2{"平台未签到?"}
+        D3["自动补签 checkinAll('auto')"]
+        D4["渲染积分卡片 + 消耗统计"]
+        D5["心跳保活 heartbeat 15s"]
+        D6["关标签页 → 心跳停止<br/>→ 服务约 1min 后自关"]
+    end
+
+    A1 -->|"无界面，直接签到后退出"| B1
+    A2 --> B
+    A3 --> B
+    B --> B3
+    B3 -->|idle > 0| B4
+    B3 -->|idle = 0| B5
+    B -->|"--open 或用户访问"| D1
+    D1 --> D2
+    D2 -->|是| D3
+    D2 -->|否| D4
+    D3 --> D4
+    D1 --> D5
+    D5 -.->|"标签页隐藏/关闭"| D6
+    D6 -.-> B4
+
+    B1 --> C1
+    B1 --> C2
+    B1 --> C3
+    C1 --> R["记录 history.json<br/>+ 更新 last_status.json"]
+    C2 --> R
+    C3 --> R
+    R --> B2
+```
+
 ## 启动
 
 > 项目路径每台机器不同，下面用 `$PROJECT_DIR` 指代你本机的项目根目录。默认位置通常是 `$HOME/.zcode/workspace/default/checkin-panel`；若不在该处，用 `find ~ -type d -name checkin-panel -path "*zcode*"` 查找，再把 `$PROJECT_DIR` 换成真实路径。
