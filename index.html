@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 积分签到面板</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --card2: #21252f; --border: #2c313d;
+    --text: #e8eaf0; --muted: #8b92a3; --green: #34c77b; --red: #f0564f;
+    --amber: #f5a623; --blue: #4d8dff; --purple: #8b6ef0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; min-height: 100vh; padding: 32px 24px 64px; font-size: 16px; }
+  .wrap { max-width: 1520px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 25px; font-weight: 700; }
+  h1 small { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 10px; }
+  .top-actions { display: flex; gap: 10px; align-items: center; }
+  button { border: none; border-radius: 11px; padding: 11px 20px; font-size: 15px; cursor: pointer; font-family: inherit; transition: opacity .15s, transform .1s; }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-main { background: linear-gradient(135deg, #4d8dff, #8b6ef0); color: #fff; font-weight: 600; font-size: 16px; padding: 13px 28px; }
+  .btn-ghost { background: var(--card2); color: var(--text); border: 1px solid var(--border); }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; }
+  .stat .label { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  .stat .value { font-size: 34px; font-weight: 700; }
+  .stat .value small { font-size: 14px; color: var(--muted); font-weight: 400; }
+  .stat .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 13px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; }
+  .card-head .name { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .badge { font-size: 13px; padding: 4px 12px; border-radius: 999px; }
+  .badge.ok { background: rgba(52,199,123,.15); color: var(--green); }
+  .badge.no { background: rgba(245,166,35,.15); color: var(--amber); }
+  .badge.err { background: rgba(240,86,79,.15); color: var(--red); }
+  .badge.na { background: var(--card2); color: var(--muted); }
+  .row { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); }
+  .row b { color: var(--text); font-weight: 600; }
+  .usage { display: flex; flex-direction: column; gap: 5px; }
+  .usage-bar { height: 7px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+  .usage-fill { height: 100%; background: linear-gradient(90deg, #34c77b, #4d8dff); border-radius: 4px; transition: width .4s; }
+  .usage-fill.high { background: linear-gradient(90deg, #f5a623, #f0564f); }
+  .usage-text { font-size: 13px; color: var(--muted); }
+  .usage-text b { color: var(--text); font-weight: 600; }
+  .next-use { background: rgba(77,141,255,.10); border: 1px solid rgba(77,141,255,.35); border-radius: 9px; padding: 8px 12px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .next-use b { color: var(--text); }
+  .next-use .rule { display: block; font-size: 11.5px; opacity: .75; }
+  .pkg.next { box-shadow: inset 3px 0 0 var(--blue); }
+  .pkgs { display: flex; flex-direction: column; gap: 7px; max-height: 330px; overflow-y: auto; padding-right: 4px; }
+  .pkgs::-webkit-scrollbar { width: 6px; }
+  .pkgs::-webkit-scrollbar-thumb { background: #3a4050; border-radius: 3px; }
+  .pkgs::-webkit-scrollbar-track { background: transparent; }
+  .pkg { background: var(--card2); border-radius: 9px; padding: 10px 14px; font-size: 13.5px; display: flex; align-items: center; gap: 10px; }
+  .pkg .n { color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pkg .u { color: var(--text); font-weight: 600; flex-shrink: 0; font-size: 13px; }
+  .pkg .e { color: var(--muted); flex-shrink: 0; }
+  .pkg .e.warn { color: var(--amber); }
+  .pkg .e.crit { color: var(--red); font-weight: 600; }
+  .pkg.crit { background: rgba(240,86,79,.10); }
+  .card-foot { margin-top: auto; display: flex; gap: 8px; }
+  .card-foot button { flex: 1; padding: 10px; font-size: 14px; }
+  .msg { font-size: 14px; border-radius: 9px; padding: 10px 14px; display: none; }
+  .msg.ok { background: rgba(52,199,123,.12); color: var(--green); display: block; }
+  .msg.err { background: rgba(240,86,79,.12); color: var(--red); display: block; }
+  .empty { color: var(--muted); font-size: 14px; background: var(--card2); border-radius: 9px; padding: 12px 14px; line-height: 1.7; }
+  .empty code { background: #000; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: min(560px, 92vw); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h2 { font-size: 17px; margin-bottom: 14px; }
+  dialog label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  dialog input, dialog select { width: 100%; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  dialog .hint { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 6px; background: var(--card2); border-radius: 8px; padding: 10px 12px; }
+  dialog .actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
+  .history { margin-top: 26px; }
+  .history h3 { font-size: 15px; margin-bottom: 10px; color: var(--muted); }
+  .history-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+  .history-list::-webkit-scrollbar { width: 6px; }
+  .history-list::-webkit-scrollbar-thumb { background: #3a4050; border-radius: 3px; }
+  .h-item { font-size: 13.5px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+  .h-item .t { color: var(--muted); }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 22px; font-size: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.5); display: none; z-index: 99; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI 积分签到面板<small id="update-time"></small></h1>
+    <div class="top-actions">
+      <button class="btn-ghost" id="btn-refresh" onclick="manualRefresh(this)">🔄 刷新</button>
+      <button class="btn-ghost" onclick="openSettings()">⚙️ 设置</button>
+      <button class="btn-main" id="btn-all" onclick="checkinAll()">⚡ 一键签到</button>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="stat">
+      <div class="label">三平台剩余积分合计</div>
+      <div class="value" id="sum-total">—</div>
+      <div class="sub" id="sum-sub"></div>
+    </div>
+    <div class="stat">
+      <div class="label">今日签到进度</div>
+      <div class="value" id="sum-checkin">—</div>
+      <div class="sub" id="sum-checkin-sub"></div>
+    </div>
+    <div class="stat">
+      <div class="label">最近的积分到期</div>
+      <div class="value" style="font-size:22px" id="sum-expiry">—</div>
+      <div class="sub" id="sum-expiry-sub"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="cards"></div>
+
+  <div class="history">
+    <h3>签到记录（按天汇总）</h3>
+    <div class="history-list" id="history"></div>
+  </div>
+</div>
+
+<dialog id="settings">
+  <h2>设置</h2>
+  <label>TRAE 会话串（备用，通常不用填）</label>
+  <input id="cfg-trae" type="password" placeholder="TRAE 失效时优先点卡片上的「重新登录（自动获取）」">
+  <div class="hint">
+    推荐走自动获取：点 TRAE 卡片上的「🔄 重新登录」，在弹出页面正常登录即可，面板自动拿到新凭据。
+    仅当自动获取失败时，才用这里：浏览器登录 <b>trae.cn</b> → F12 → Application → Cookies → 复制
+    <code>X-Cloudide-Session</code> 的值粘贴到上面（约 14 天有效）。
+  </div>
+  <label>Qoder PAT（一年录一次）</label>
+  <input id="cfg-qoder" type="password" placeholder="点 Qoder 卡片上的「打开令牌页面」创建后粘贴到这里">
+  <div class="hint">
+    点 Qoder 卡片上的「🔗 打开令牌页面」→ 登录 → 「新建令牌」→ 复制粘贴到上面 → 保存。
+    （区域保持 china 即国内版）
+  </div>
+  <label>区域</label>
+  <select id="cfg-region"><option value="china">国内版 (china)</option><option value="global">国际版 (global)</option></select>
+  <div class="actions">
+    <button class="btn-ghost" onclick="clearCreds('trae')">清除 TRAE</button>
+    <button class="btn-ghost" onclick="clearCreds('qoder')">清除 Qoder</button>
+    <button class="btn-ghost" onclick="document.getElementById('settings').close()">取消</button>
+    <button class="btn-main" onclick="saveSettings()">保存</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PLATFORMS = {
+  workbuddy: { name: 'WorkBuddy', color: '#4d8dff' },
+  trae:      { name: 'TRAE',      color: '#f0564f' },
+  qoder:     { name: 'Qoder',     color: '#8b6ef0' },
+};
+let status = null;
+
+function fmt(n) { return n == null ? '—' : Number(n).toLocaleString('zh-CN', {maximumFractionDigits: 2}); }
+function fmtExpiry(e) {
+  if (!e) return '';
+  return e.startsWith(new Date().getFullYear() + '-') ? e.slice(5) : e;  // 当年省略年份，跨年的保留
+}
+function daysUntil(d) {
+  if (!d) return null;
+  const diff = Math.ceil((new Date(d) - new Date()) / 86400000);
+  return isNaN(diff) ? null : diff;
+}
+
+function badge(p) {
+  if (p.configured === false) return '<span class="badge na">未配置</span>';
+  if (p.ok === false) return '<span class="badge err">出错</span>';
+  if (p.checked_in_today === true) return '<span class="badge ok">已签到</span>';
+  if (p.checked_in_today === false) return '<span class="badge no">未签到</span>';
+  return '<span class="badge na">未知</span>';
+}
+
+function render() {
+  const el = id => document.getElementById(id);
+  el('update-time').textContent = status ? ' · 更新于 ' + status.time : '';
+  const cards = el('cards'); cards.innerHTML = '';
+  let sum = 0, hasCredits = false, checked = 0, checkable = 0;
+  let soonest = null, soonestName = '', expiring7 = [], expiring3 = 0;
+  let sumTotal = 0, sumUsed = 0;
+
+  for (const [key, meta] of Object.entries(PLATFORMS)) {
+    const p = (status && status.platforms[key]) || { configured: null };
+    const card = document.createElement('div');
+    card.className = 'card';
+    let inner = `<div class="card-head"><div class="name"><span class="dot" style="background:${meta.color}"></span>${meta.name}</div>${badge(p)}</div>`;
+
+    if (p.ok === false && (key === 'trae' ? (p.needs_relogin || p.configured === false) : false)) {
+      // TRAE：傻瓜式重新登录 —— 点按钮打开登录页，登录后面板自动获取新凭据
+      inner += `<div class="msg err">TRAE 登录已失效${p.credential_expires ? '（会话约 14 天一换）' : ''}</div>
+        <div class="empty">点下方按钮 → 在弹出的页面里正常登录（手机验证码即可）→ <b>回来自动搞定，无需复制粘贴</b>。</div>
+        <div class="card-foot"><button class="btn-main" onclick="traeRelogin(this)">🔄 重新登录（自动获取）</button></div>
+        <div style="text-align:center"><a href="#" onclick="openSettings();return false" style="color:var(--muted);font-size:12px">手动粘贴（备用）</a></div>`;
+      card.innerHTML = inner; cards.appendChild(card); continue;
+    }
+    if (p.ok === false && key === 'qoder' && (p.needs_pat || p.configured === false)) {
+      // Qoder：引导到令牌页面创建，再粘贴一次（一年只需一次）
+      inner += `<div class="msg err">${p.configured === false ? '还没录入 Qoder 令牌' : 'Qoder 令牌已失效'}</div>
+        <div class="empty">点下方按钮打开 Qoder 令牌页 → 「新建令牌」→ 复制 → 点「手动录入」粘贴保存。<br>令牌有效期最长一年，弄一次管一年。</div>
+        <div class="card-foot"><button class="btn-ghost" onclick="window.open('https://qoder.cn/account/integrations','_blank')">🔗 打开令牌页面</button><button class="btn-main" onclick="openSettings()">手动录入</button></div>`;
+      card.innerHTML = inner; cards.appendChild(card); continue;
+    }
+    if (p.configured === false) {
+      inner += `<div class="empty">` +
+        (key === 'workbuddy'
+          ? `无需任何填写：打开 WorkBuddy 客户端并登录，面板会自动读取登录凭据。`
+          : `尚未配置。`) + `</div>`;
+    } else if (p.ok === false) {
+      inner += `<div class="msg err">${p.error || '未知错误'}</div>`;
+    } else {
+      if (p.checked_in_today !== null && p.checked_in_today !== undefined) { checkable++; if (p.checked_in_today) checked++; }
+      inner += `<div class="row"><span>剩余积分</span><b style="font-size:18px">${fmt(p.credits_remain)}${p.streak_days != null ? ` · 连签 ${p.streak_days} 天` : ''}</b></div>`;
+      if (p.credits_total > 0) {
+        const used = Number(p.credits_used) || 0, total = Number(p.credits_total) || 0;
+        const pct = Math.min(100, Math.max(0, Math.round(used / total * 100)));
+        inner += `<div class="usage">
+          <div class="usage-bar"><div class="usage-fill${pct >= 80 ? ' high' : ''}" style="width:${pct}%"></div></div>
+          <div class="usage-text">已用 <b>${fmt(used)}</b> · 剩 <b>${fmt(p.credits_remain)}</b> / 共 ${fmt(total)}（已用 ${pct}%）</div>
+        </div>`;
+      }
+      if (p.activity_name) inner += `<div class="row"><span>签到活动</span><b>${p.activity_name}${p.activity_end ? ' · ' + p.activity_end + ' 截止' : ''}</b></div>`;
+      if (Array.isArray(p.packages) && p.packages.length) {
+        const nextPk = p.next_pack;
+        if (nextPk) {
+          inner += `<div class="next-use">⚡ 优先消耗 → <b>${nextPk.name}</b>（${fmtExpiry(nextPk.expiry)} 到期，剩 ${fmt(nextPk.remain)}/${fmt(nextPk.total)}）` +
+            `<span class="rule">${p.priority_rule || ''}</span></div>`;
+        }
+        const sorted = [...p.packages].sort((a, b) => {
+          // ⚡ 优先消耗的包置顶，其余按到期时间升序
+          const aNext = nextPk && a.expiry === nextPk.expiry && a.remain === nextPk.remain;
+          const bNext = nextPk && b.expiry === nextPk.expiry && b.remain === nextPk.remain;
+          if (aNext !== bNext) return aNext ? -1 : 1;
+          return (a.expiry || '9999') < (b.expiry || '9999') ? -1 : 1;
+        });
+        inner += `<div class="pkgs">` + sorted.map(pk => {
+          const d = daysUntil(pk.expiry);
+          const hasRemain = (Number(pk.remain) || 0) > 0;
+          if (d !== null && d >= 0 && hasRemain) {
+            if (soonest === null || d < soonest) { soonest = d; soonestName = meta.name; }
+            if (d <= 7) { expiring7.push({ name: meta.name, remain: Number(pk.remain) || 0, day: d }); if (d <= 3) expiring3++; }
+          }
+          const cls = d !== null && d <= 3 ? 'crit' : (d !== null && d <= 7 ? 'warn' : '');
+          const usage = (pk.used != null && pk.total)
+            ? `已用 ${fmt(pk.used)}/${fmt(pk.total)}`
+            : `${fmt(pk.remain)} / ${fmt(pk.total)}`;
+          const right = pk.expiry ? `${fmtExpiry(pk.expiry)}${d !== null ? ` (剩${d}天)` : ''}` : (pk.note || '');
+          const isNext = nextPk && pk.expiry === nextPk.expiry && pk.remain === nextPk.remain;
+          return `<div class="pkg${cls === 'crit' ? ' crit' : ''}${isNext ? ' next' : ''}"><span class="n">${isNext ? '⚡ ' : ''}${pk.name || '资源包'}</span><span class="u">${usage}</span><span class="e ${cls}">${right}</span></div>`;
+        }).join('') + `</div>`;
+      }
+      if (p.credits_remain != null) { sum += Number(p.credits_remain) || 0; hasCredits = true; }
+      sumTotal += Number(p.credits_total) || 0; sumUsed += Number(p.credits_used) || 0;
+      if (p.credential_expires) inner += `<div class="row"><span>凭据有效期${key === 'trae' ? '约' : '至'}</span><b>${p.credential_expires}${key === 'trae' ? '（按14天估算）' : ''}</b></div>`;
+      if (p.checked_in_today === true) {
+        const tc = p.today_checkin;
+        inner += `<div class="row"><span>今日签到</span><b style="color:var(--green)">${tc ? `${tc.at} · ${tc.by}` : '官方客户端已完成'}</b></div>`;
+      }
+      if (!Array.isArray(p.packages) || !p.packages.length) inner += `<div class="empty">暂无积分明细数据</div>`;
+    }
+    inner += `<div class="card-foot"><button class="btn-ghost" onclick="checkinOne('${key}', this)">${meta.name} 签到</button></div>`;
+    card.innerHTML = inner;
+    cards.appendChild(card);
+  }
+
+  el('sum-total').innerHTML = hasCredits ? `${fmt(sum)} <small>credits</small>` : '—';
+  el('sum-sub').textContent = sumTotal > 0
+    ? `已用 ${fmt(sumUsed)} · 剩 ${fmt(sum)} / 总 ${fmt(sumTotal)}`
+    : 'WorkBuddy + TRAE + Qoder';
+  el('sum-checkin').textContent = checkable ? `${checked} / ${checkable}` : '—';
+  el('sum-checkin-sub').textContent = checkable ? (checked === checkable ? '全部完成 ✓' : '还有平台未签到') : '';
+  if (soonest !== null) {
+    el('sum-expiry').textContent = `${soonest} 天后`;
+    el('sum-expiry-sub').textContent = expiring7.length
+      ? `⚠️ 7 天内到期 ${expiring7.length} 个包（剩 ${fmt(expiring7.reduce((s, p) => s + p.remain, 0))} credits），${soonestName} 最先`
+      : `${soonestName} 有积分包即将到期`;
+  }
+  loadHistory();
+}
+
+async function refresh() {
+  try {
+    status = await (await fetch('/api/status')).json();
+    render();
+  } catch (e) { toast('无法连接面板服务: ' + e.message); }
+}
+
+async function manualRefresh(btn) {
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>获取中…';
+  await refresh();
+  btn.disabled = false; btn.innerHTML = old;
+  if (status) toast('已更新到最新数据 · ' + status.time, 2500);
+}
+
+function fmtResult(k, v) {
+  // 把一次签到结果说清楚：刚签成功 / 早已签过(谁签的) / 失败
+  if (!v) return `${PLATFORMS[k].name}: 无结果`;
+  if (v.ok && v.status === 'claimed') return `${PLATFORMS[k].name}: ✓ 刚刚签到成功${v.credit ? ` +${v.credit}` : ''}`;
+  if (v.ok) {
+    const s = v.signed || {};
+    const who = s.at ? `${s.at} ${s.by}` : (s.by || '官方客户端');
+    return `${PLATFORMS[k].name}: 今天已签过 ✓（${who}）`;
+  }
+  return `${PLATFORMS[k].name}: ✗ ${(v.error || '失败').slice(0, 60)}`;
+}
+
+async function checkinOne(key, btn) {
+  const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>签到中…';
+  try {
+    const r = await (await fetch('/api/checkin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({platform: key, source: 'manual'})})).json();
+    toast(fmtResult(key, r.results && r.results[key]), 4500);
+  } catch (e) { toast('请求失败: ' + e.message); }
+  btn.disabled = false; btn.innerHTML = old;
+  await refresh();
+}
+
+async function checkinAll(source = 'manual') {
+  const btn = document.getElementById('btn-all');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>签到中…';
+  try {
+    const r = await (await fetch('/api/checkin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({source})})).json();
+    const results = Object.entries(r.results || {});
+    const justNow = results.filter(([, v]) => v.ok && v.status === 'claimed').length;
+    const failed = results.filter(([, v]) => !v.ok).length;
+    let head;
+    if (failed) head = `⚠ ${failed} 个平台失败`;
+    else if (justNow) head = `✓ 本次签到成功 ${justNow} 个平台`;
+    else head = '✓ 今天早已全部签好，无需重复';
+    toast(head + '　|　' + results.map(([k, v]) => fmtResult(k, v)).join('　'), 6500);
+  } catch (e) { toast('请求失败: ' + e.message); }
+  btn.disabled = false; btn.innerHTML = '⚡ 一键签到';
+  await refresh();
+}
+
+async function loadHistory() {
+  try {
+    const h = await (await fetch('/api/history')).json();
+    // 按天汇总：每天每平台只显示当天最新结果，重复的空跑不刷屏
+    const byDay = {};
+    for (const rec of h) {
+      const day = (rec.time || '').slice(0, 10);
+      if (!day) continue;
+      const d = byDay[day] = byDay[day] || { attempts: 0, platforms: {} };
+      d.attempts++;
+      for (const [k, v] of Object.entries(rec.results || {})) {
+        if (!d.platforms[k]) d.platforms[k] = v;  // h 按时间倒序，首次遇到即当天最新
+      }
+    }
+    document.getElementById('history').innerHTML = Object.entries(byDay).slice(0, 30).map(([day, d]) => {
+      const parts = Object.entries(d.platforms).map(([k, v]) => {
+        const ok = v && v.ok;
+        const label = ok ? (v.status === 'claimed' ? `✓ 签到成功${v.credit ? ` +${v.credit}` : ''}` : '已签') : '✗ 失败';
+        return `<b style="color:${ok ? 'var(--green)' : 'var(--red)'}">${PLATFORMS[k] ? PLATFORMS[k].name : k} ${label}</b>`;
+      }).join('　');
+      const extra = d.attempts > 1 ? `<span class="t" style="opacity:.7">（${d.attempts} 次记录）</span>` : '';
+      return `<div class="h-item"><span class="t">${day}</span><span>${parts} ${extra}</span></div>`;
+    }).join('') || '<div class="h-item">暂无记录</div>';
+  } catch (e) {}
+}
+
+function openSettings() {
+  document.getElementById('settings').showModal();
+}
+
+let _grabTimer = null;
+async function traeRelogin(btn) {
+  const old = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>等待登录… 登录完成会自动获取';
+  window.open('https://www.trae.cn/login', '_blank');
+  toast('已在弹出的页面打开 TRAE 登录，登录成功后这里会自动变绿');
+  clearInterval(_grabTimer);
+  let tries = 0;
+  _grabTimer = setInterval(async () => {
+    tries++;
+    try {
+      const r = await (await fetch('/api/grab_trae', {method: 'POST'})).json();
+      if (r.ok) {
+        clearInterval(_grabTimer);
+        toast('✓ ' + r.message, 5000);
+        await refresh();
+        return;
+      }
+    } catch (e) {}
+    if (tries >= 60) {  // 5 秒 × 60 次 = 5 分钟
+      clearInterval(_grabTimer);
+      btn.disabled = false; btn.innerHTML = old;
+      toast('等待超时：确认已在弹出页面完成登录；仍未生效可点「手动粘贴（备用）」', 6000);
+    }
+  }, 5000);
+}
+async function saveSettings() {
+  const body = {
+    trae_session: document.getElementById('cfg-trae').value || undefined,
+    qoder_pat: document.getElementById('cfg-qoder').value || undefined,
+    qoder_region: document.getElementById('cfg-region').value,
+  };
+  await fetch('/api/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  document.getElementById('settings').close();
+  toast('已保存');
+  await refresh();
+}
+async function clearCreds(which) {
+  const body = {}; body[which === 'trae' ? 'clear_trae_session' : 'clear_qoder_pat'] = true;
+  await fetch('/api/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  document.getElementById('cfg-' + (which === 'trae' ? 'trae' : 'qoder')).value = '';
+  toast('已清除');
+  await refresh();
+}
+
+function toast(msg, ms = 3500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', ms);
+}
+
+refresh().then(() => {
+  // 打开页面时如还有平台未签到，自动补签
+  const p = status && status.platforms || {};
+  const need = Object.entries(p).some(([k, v]) => v.configured !== false && v.ok !== false && v.checked_in_today === false);
+  if (need) checkinAll('auto');
+});
+setInterval(refresh, 5 * 60 * 1000);
+</script>
+</body>
+</html>

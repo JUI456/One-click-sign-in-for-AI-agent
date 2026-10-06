@@ -1,0 +1,15 @@
+# ===== 密钥 / 凭据（切勿提交） =====
+config.json
+*.info
+
+# ===== 运行时状态 / 日志（本机专属，不入库） =====
+history.json
+last_status.json
+server.log
+server.pid
+
+# ===== 工作区元数据 =====
+.mimosa/
+.DS_Store
+__pycache__/
+*.pyc
