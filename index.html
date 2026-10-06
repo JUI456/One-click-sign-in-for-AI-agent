@@ -97,11 +97,13 @@
   dialog .cfg-dot { width: 10px; height: 10px; border-radius: 50%; }
   dialog .cfg-section-head b { font-size: 15px; font-weight: 600; }
   dialog .cfg-section-head small { color: var(--muted); font-size: 12px; margin-left: auto; }
+  dialog .expiry-badge { color: var(--amber); background: rgba(245,166,35,.14); border: 1px solid rgba(245,166,35,.35); font-size: 12px; padding: 3px 10px; border-radius: 999px; margin-left: auto; font-weight: 600; white-space: nowrap; }
+  dialog .expiry-badge.crit { color: var(--red); background: rgba(240,86,79,.12); border-color: rgba(240,86,79,.4); }
   dialog label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
   dialog input, dialog select { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
   dialog .hint { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 8px; }
-  dialog .btn-clear { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; padding: 2px 0; margin-top: 6px; opacity: .8; }
-  dialog .btn-clear:hover { opacity: 1; text-decoration: underline; }
+  dialog .btn-clear { display: block; width: 100%; margin-top: 10px; background: rgba(240,86,79,.10); border: 1px solid rgba(240,86,79,.45); color: var(--red); font-size: 13px; font-weight: 600; font-family: inherit; border-radius: 8px; padding: 8px 12px; cursor: pointer; transition: background .15s; }
+  dialog .btn-clear:hover { background: rgba(240,86,79,.22); }
   dialog .actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
   .history { margin-top: 26px; }
   .history h3 { font-size: 15px; margin-bottom: 10px; color: var(--muted); }
@@ -171,7 +173,7 @@
     <div class="cfg-section-head">
       <span class="cfg-dot" style="background:var(--blue)"></span>
       <b>WorkBuddy</b>
-      <small>零维护，无需配置</small>
+      <small id="cfg-wb-expiry">零维护，无需配置</small>
     </div>
     <div class="hint">自动读取本机 WorkBuddy 客户端凭据，保持登录即可。</div>
   </div>
@@ -180,25 +182,39 @@
     <div class="cfg-section-head">
       <span class="cfg-dot" style="background:var(--red)"></span>
       <b>TRAE</b>
-      <small>约 14 天过期</small>
+      <small id="cfg-trae-expiry">约 14 天过期</small>
     </div>
     <label>会话串（备用手动录入）</label>
     <input id="cfg-trae" type="password" placeholder="通常无需填写，优先用卡片上的自动获取">
-    <button class="btn-clear" onclick="clearCreds('trae')">清除 TRAE 凭据</button>
-    <div class="hint">失效时优先点 TRAE 卡片上的「🔄 重新登录」自动获取。仅自动失败时：登录 trae.cn → F12 → Cookies → 复制 <code>X-Cloudide-Session</code> 粘贴到这里。</div>
+    <button class="btn-clear" onclick="clearCreds('trae')">🗑 清除 TRAE 凭据</button>
+    <label>浏览器来源（自动获取会话）</label>
+    <select id="cfg-cookie-source">
+      <option value="zcode">ZCode 内置浏览器（推荐，明文存储可直接读）</option>
+      <option value="chrome">Chrome（macOS Keychain 加密，无法自动读取）</option>
+      <option value="safari">Safari（macOS Keychain 加密，无法自动读取）</option>
+      <option value="manual">手动模式（需手动粘贴会话串）</option>
+    </select>
+    <div class="hint">
+      <div id="cfg-trae-test-result" style="margin-top:8px;"></div>
+      <button class="btn-ghost" id="btn-test-trae" onclick="testTraeSession()" style="margin-top:6px; font-size:12px;">🔍 测试当前会话是否有效</button>
+    </div>
+    <div class="hint" style="margin-top:8px; font-size:11px; opacity:.8;">
+      ⚠️ macOS 上 Chrome/Safari 的 Cookie 被系统 Keychain 加密，面板无法直接读取。如需使用这些浏览器，请切换到「手动模式」并定期手动粘贴会话串（约 14 天过期）。
+      推荐继续使用 ZCode 内置浏览器（零维护）或手动模式。
+    </div>
   </div>
 
   <div class="cfg-section">
     <div class="cfg-section-head">
       <span class="cfg-dot" style="background:var(--purple)"></span>
       <b>Qoder</b>
-      <small>一年录一次</small>
+      <small id="cfg-qoder-expiry">一年录一次</small>
     </div>
     <label>PAT 令牌</label>
     <input id="cfg-qoder" type="password" placeholder="点卡片上的「打开令牌页面」创建后粘贴到这里">
     <label>区域</label>
     <select id="cfg-region"><option value="china">国内版 (china)</option><option value="global">国际版 (global)</option></select>
-    <button class="btn-clear" onclick="clearCreds('qoder')">清除 Qoder 凭据</button>
+    <button class="btn-clear" onclick="clearCreds('qoder')">🗑 清除 Qoder 凭据</button>
     <div class="hint">点 Qoder 卡片上的「🔗 打开令牌页面」→ 登录 → 新建令牌 → 复制粘贴到上面保存。</div>
   </div>
 
@@ -502,7 +518,54 @@ async function loadHistory() {
 }
 
 function openSettings() {
+  // 三平台凭据时效醒目提示：有真实到期日就显示剩余天数，≤3 天转红色警告
+  const EXPIRY = [
+    ['workbuddy', 'cfg-wb-expiry', '零维护，无需配置'],
+    ['trae', 'cfg-trae-expiry', '约 14 天过期'],
+    ['qoder', 'cfg-qoder-expiry', '一年录一次'],
+  ];
+  for (const [key, id, fallback] of EXPIRY) {
+    const el = document.getElementById(id);
+    const exp = ((status || {}).platforms || {})[key]?.credential_expires;
+    el.classList.remove('expiry-badge', 'crit');
+    if (exp) {
+      const days = Math.ceil((new Date(exp + 'T23:59:59') - Date.now()) / 864e5);
+      // 跨年不省略年份，避免“10-06”被误读成本年已过
+      const label = exp.startsWith(new Date().getFullYear() + '-') ? exp.slice(5) : exp;
+      el.textContent = days > 0 ? `⏳ 有效期至 ${label} · 剩 ${days} 天` : `⚠️ 已于 ${label} 过期`;
+      el.classList.add('expiry-badge');
+      if (days <= 3) el.classList.add('crit');
+    } else {
+      el.textContent = fallback;
+    }
+  }
+  // 加载 cookie_source 配置
+  if (status && status.configured) {
+    document.getElementById('cfg-cookie-source').value = status.configured.cookie_source || 'zcode';
+  }
   document.getElementById('settings').showModal();
+}
+
+async function testTraeSession() {
+  const resultEl = document.getElementById('cfg-trae-test-result');
+  const btn = document.getElementById('btn-test-trae');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>测试中…';
+  resultEl.innerHTML = '';
+  try {
+    const resp = await fetch('/api/test_trae_session', { method: 'GET' });
+    const data = await resp.json();
+    if (data.valid) {
+      resultEl.innerHTML = `<div class="msg ok">${data.message || '会话有效 ✓'}</div>`;
+    } else {
+      resultEl.innerHTML = `<div class="msg err">${data.message || '会话无效'}</div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="msg err">测试失败：${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 测试当前会话是否有效';
+  }
 }
 
 let _grabTimer = null;
@@ -537,6 +600,7 @@ async function saveSettings() {
     trae_session: document.getElementById('cfg-trae').value || undefined,
     qoder_pat: document.getElementById('cfg-qoder').value || undefined,
     qoder_region: document.getElementById('cfg-region').value,
+    cookie_source: document.getElementById('cfg-cookie-source').value,
   };
   await fetch('/api/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   document.getElementById('settings').close();
@@ -544,10 +608,14 @@ async function saveSettings() {
   await refresh();
 }
 async function clearCreds(which) {
+  const name = which === 'trae' ? 'TRAE' : 'Qoder';
+  // 两次确认：第一次告知后果，第二次最后拦截，防误点
+  if (!confirm(`确定要清除 ${name} 凭据吗？\n\n清除后面板将无法为 ${name} 签到/查积分，需要重新登录或重新录入凭据才能恢复。`)) return;
+  if (!confirm(`⚠️ 最后确认：真的要清除 ${name} 凭据？此操作不可撤销！`)) return;
   const body = {}; body[which === 'trae' ? 'clear_trae_session' : 'clear_qoder_pat'] = true;
   await fetch('/api/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
   document.getElementById('cfg-' + (which === 'trae' ? 'trae' : 'qoder')).value = '';
-  toast('已清除');
+  toast(`${name} 凭据已清除，需要时请重新获取/录入`, 5000);
   await refresh();
 }
 

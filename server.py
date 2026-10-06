@@ -44,6 +44,7 @@ DEFAULT_CONFIG = {
     "qoder_pat": "",
     "qoder_region": "china",  # china | global
     "auto_checkin_on_open": True,
+    "cookie_source": "zcode",  # zcode | chrome | safari | manual
 }
 
 ctx = ssl.create_default_context()
@@ -213,7 +214,27 @@ def workbuddy_checkin():
 TRAE_BASE = "https://api.trae.cn"
 
 
-def grab_trae_session():
+def grab_browser_session(source="zcode"):
+    """从指定浏览器源提取 TRAE 会话串；拿不到返回 None。
+
+    支持源：
+    - zcode: ZCode 内置浏览器（明文存储，直接可读）
+    - chrome: Chrome（macOS Keychain 加密，无法直接读，返回 None）
+    - safari: Safari（macOS Keychain 加密，无法直接读，返回 None）
+    - manual: 手动模式（返回 None，由用户手动粘贴）
+    """
+    if source == "zcode":
+        return _grab_zcode_session()
+    elif source in ("chrome", "safari"):
+        # macOS 上 Chrome/Safari 的 Cookie 被 Keychain 加密，无法直接读取
+        # 返回 None，提示用户切换到 manual 模式或继续使用 ZCode
+        return None
+    elif source == "manual":
+        return None
+    return None
+
+
+def _grab_zcode_session():
     """从 ZCode 内置浏览器 Cookie 库提取最新的 TRAE 会话串；拿不到返回 None。"""
     if not IAB_COOKIE_DB.exists():
         return None
@@ -237,8 +258,13 @@ def grab_trae_session():
     return (val or "").strip() or None  # Cookie 库若为加密存储则无法直接读取
 
 
+def grab_trae_session():
+    """兼容旧函数名，调用新函数。"""
+    return grab_browser_session("zcode")
+
+
 def trae_token_with_heal(cfg):
-    """获取 TRAE JWT；当前会话失效时先尝试从内置浏览器无感换取新会话。
+    """获取 TRAE JWT；当前会话失效时先尝试从配置浏览器源无感换取新会话。
 
     返回 (token, err, needs_relogin)。needs_relogin=True 表示自动修复失败，
     前端应引导用户重新登录。
@@ -251,7 +277,8 @@ def trae_token_with_heal(cfg):
     else:
         token, err = None, "尚未配置 TRAE 登录"
 
-    fresh = grab_trae_session()
+    source = cfg.get("cookie_source", "zcode")
+    fresh = grab_browser_session(source)
     if fresh and fresh != session:
         tok2, err2 = trae_get_token(fresh)
         if tok2:
@@ -801,6 +828,18 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/info":
             self._json({"idle_timeout": IDLE_TIMEOUT, "resident": RESIDENT,
                         "uptime": int(time.time() - BOOT_TIME) if BOOT_TIME else 0})
+        elif self.path == "/api/test_trae_session":
+            """测试当前 TRAE 会话是否有效（用于设置弹窗的「测试会话」按钮）。"""
+            cfg = load_config()
+            session = (cfg.get("trae_session") or "").strip()
+            if not session:
+                self._json({"ok": False, "valid": False, "message": "尚未配置 TRAE 会话"})
+                return
+            token, err = trae_get_token(session)
+            if token:
+                self._json({"ok": True, "valid": True, "message": "会话有效 ✓"})
+            else:
+                self._json({"ok": False, "valid": False, "message": f"会话无效：{err or '未知错误'}"})
         elif self.path == "/api/heartbeat":
             # 心跳：页面“可见”时定期上报（见 index.html），保持轻量模式服务存活。
             # 标签页隐藏/关闭后心跳停止上报，服务端在空闲阈值（--idle-shutdown）后自动关停，
@@ -835,7 +874,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/config":
             cfg = load_config()
             for k in ("trae_session", "trae_device_id", "qoder_pat", "qoder_region",
-                      "trae_session_expires", "qoder_pat_expires"):
+                      "trae_session_expires", "qoder_pat_expires", "cookie_source"):
                 if k in body:
                     cfg[k] = str(body[k]).strip()
             # 新写入 TRAE 会话时按 14 天估算有效期（可手动覆盖）
@@ -850,7 +889,8 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["qoder_pat"] = ""
             save_config(cfg)
             self._json({"ok": True, "configured": {
-                "trae": bool(cfg["trae_session"]), "qoder": bool(cfg["qoder_pat"])}})
+                "trae": bool(cfg["trae_session"]), "qoder": bool(cfg["qoder_pat"]),
+                "cookie_source": cfg.get("cookie_source", "zcode")}})
         elif self.path == "/api/mode":
             # 运行时切换运行模式：resident=true→常驻（IDLE_TIMEOUT=0，关标签页也保持运行）；
             # resident=false→轻量（关标签页即停，空闲 LIGHTWEIGHT_IDLE_SECONDS 后自关）。

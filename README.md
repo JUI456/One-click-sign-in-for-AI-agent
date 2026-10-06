@@ -80,6 +80,45 @@ python3 server.py
 
 手动录入入口在「⚙️ 设置」，仅作为自动获取失败时的备用通道。
 
+## TRAE 会话获取机制
+
+### 自动获取（推荐）
+
+面板默认从 **ZCode 内置浏览器** 读取 TRAE 会话串（`X-Cloudide-Session`），实现零维护自动愈合：
+
+- **数据源**：`~/Library/Application Support/ZCode/session/Partitions/zcode-embedded-browser/Cookies`
+- **原理**：ZCode 内置浏览器使用**明文字段存储** Cookie，Python 可直接读取
+- **触发时机**：
+  - 配置中无会话串时
+  - 会话串失效（JWT 验证失败）时
+  - 手动点击 TRAE 卡片「🔄 重新登录」后
+
+### 浏览器来源配置
+
+在「⚙️ 设置」→ TRAE 区块可切换「浏览器来源」：
+
+| 来源 | 说明 | 自动读取 |
+|---|---|---|
+| **ZCode 内置浏览器** | 推荐，明文存储可直接读 | ✓ |
+| Chrome | macOS Keychain 加密，无法自动读取 | ✗ |
+| Safari | macOS Keychain 加密，无法自动读取 | ✗ |
+| 手动模式 | 需手动粘贴会话串 | ✗ |
+
+> ⚠️ **macOS 安全限制**：Chrome/Safari 的 Cookie 被系统 Keychain 加密存储，Python 无法直接读取明文值。如需使用这些浏览器，请切换到「手动模式」并定期手动粘贴会话串（约 14 天过期）。
+
+### 手动模式
+
+如果未来不使用 ZCode，可切换到「手动模式」：
+
+1. 在「⚙️ 设置」→ TRAE 区块选择「手动模式」
+2. 登录 trae.cn → F12 → Application → Cookies → 复制 `X-Cloudide-Session`
+3. 粘贴到输入框 → 保存
+4. 约 14 天后会话过期，需重复上述步骤
+
+### 测试会话有效性
+
+设置弹窗中提供「🔍 测试当前会话是否有效」按钮，点击可验证当前配置的会话串是否有效。
+
 ## 自动签到（每天定时，无需开面板）
 
 > ⚠️ **激活方式（实测）**：在本机 macOS 上，`launchctl bootstrap` 与旧版 `launchctl load` 把任务注册到 `gui/$UID` 都会报 `Bootstrap failed: 5: Input/output error`（即使 plist 经 `plutil -lint` 校验合法、权限正常）。**不要依赖 bootstrap**——把 plist 放进 `~/Library/LaunchAgents/` 后，**注销并重新登录（或重启）一次**，macOS 会自动加载，这是最可靠的方式（zsh 里 `$UID` 是只读变量，`UID=$(id -u)` 报错不影响，bootstrap 用的是内置 `$UID`）。
