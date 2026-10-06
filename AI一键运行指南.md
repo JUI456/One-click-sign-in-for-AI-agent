@@ -187,7 +187,7 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
 2. **服务开机自启并常驻**：登录后自动启动 `server.py`，网页 `http://127.0.0.1:8787` 永远可访问。
 
 > ⚠️ 项目自带的 `com.user.checkin-panel.plist` 写死了原作者的用户名和 python 路径，**不要直接 `cp`**。下面脚本按当前机器动态生成。
-> 注意：部分新版 macOS 上 `launchctl load` 已失效（报 I/O error）。其实只要 plist 放进 `~/Library/LaunchAgents/`，**下次登录会自动加载**，不一定需要手动 bootstrap；想立刻生效就在本机终端跑下面的 bootstrap 命令。
+> **激活方式（实测）**：在本机 macOS 上，`launchctl bootstrap` 与 `launchctl load` 注册到 `gui/$UID` 都会报 `Bootstrap failed: 5: Input/output error`（即使 plist 经 `plutil -lint` 校验合法）。**不要依赖 bootstrap**——把 plist 放进 `~/Library/LaunchAgents/` 后，**注销并重新登录（或重启）一次**，macOS 会自动加载，最可靠。下面的 bootstrap 命令仅在你本机不报该错误时才需要。
 
 ```bash
 PY=$(command -v python3)

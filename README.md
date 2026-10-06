@@ -24,6 +24,8 @@ python3 server.py
 
 ## 自动签到（每天定时，无需开面板）
 
+> ⚠️ **激活方式（实测）**：在本机 macOS 上，`launchctl bootstrap` 与旧版 `launchctl load` 把任务注册到 `gui/$UID` 都会报 `Bootstrap failed: 5: Input/output error`（即使 plist 经 `plutil -lint` 校验合法、权限正常）。**不要依赖 bootstrap**——把 plist 放进 `~/Library/LaunchAgents/` 后，**注销并重新登录（或重启）一次**，macOS 会自动加载，这是最可靠的方式（zsh 里 `$UID` 是只读变量，`UID=$(id -u)` 报错不影响，bootstrap 用的是内置 `$UID`）。
+
 ### 方式一：每天 09:30 自动签到（连网页都不用开）
 
 ```bash
@@ -32,7 +34,7 @@ PY=$(command -v python3)
 sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DIR#g" \
     -e "s#/opt/homebrew/bin/python3#$PY#g" \
     com.user.checkin-panel.plist > ~/Library/LaunchAgents/com.user.checkin-panel.plist
-# 立刻生效（新版 macOS 用 bootstrap；load 可能报 I/O error）
+# 立即激活（若 bootstrap 报 I/O error，注销/重启一次即可，LaunchAgents 会自动加载）
 UID=$(id -u)
 launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.plist 2>/dev/null || echo "请在本机终端执行，或注销后自动生效"
 # 查看日志
@@ -69,6 +71,7 @@ launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.ser
 
 - `server.py` — 面板服务（纯 Python 标准库，无依赖），只监听 127.0.0.1
 - `index.html` — 前端页面
+- `link.svg` — 页面 favicon（链接图标；由原 `苹果.svg` 替换而来，服务端仅白名单放行此文件，避免泄露 `config.json` 等同目录密钥）
 - `config.json` — 凭据保存处（权限 600，仅本机可读；请勿外传）
 - `history.json` — 签到历史；`last_status.json` — 最近一次状态缓存
 
