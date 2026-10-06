@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 HISTORY_PATH = BASE_DIR / "history.json"
 STATE_PATH = BASE_DIR / "last_status.json"
+DAILY_PATH = BASE_DIR / "daily_baseline.json"
 INDEX_PATH = BASE_DIR / "index.html"
 
 WORKBUDDY_AUTH_FILE = Path.home() / "Library/Application Support/CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info"
@@ -627,19 +628,65 @@ def next_consumed_pack(packs):
     return sorted(cands, key=lambda p: p["expiry"])[0]
 
 
+def load_daily():
+    """读取每日消耗基线。结构：{date, baselines:{平台:累计已用}, last_used:{平台:累计已用}}。"""
+    try:
+        d = json.loads(DAILY_PATH.read_text())
+        if isinstance(d, dict):
+            d.setdefault("baselines", {})
+            d.setdefault("last_used", {})
+            return d
+    except Exception:
+        pass
+    return {"date": "", "baselines": {}, "last_used": {}}
+
+
+def save_daily(d):
+    try:
+        DAILY_PATH.write_text(json.dumps(d, ensure_ascii=False))
+    except Exception:
+        pass
+
+
 def collect_status(cfg=None):
     cfg = cfg or load_config()
     out = {"time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "platforms": {}}
+    daily = load_daily()
+    today = today_str()
+    # 跨天：用昨天最后一次观测到的累计已用作为今天基线（最贴近 0 点的真实值，
+    # 能覆盖“凌晨到面板首次刷新前”这段时间的消耗）；新装则基线从今天首次观测值起算。
+    if daily.get("date") != today:
+        daily = {"date": today, "baselines": dict(daily.get("last_used") or {}), "last_used": {}}
+    used_today = {}
     for name in PLATFORMS:
         try:
             out["platforms"][name] = STATUS_FN[name](cfg)
         except Exception as e:
             out["platforms"][name] = {"ok": False, "error": str(e)[:200], "configured": None}
         st = out["platforms"][name]
+        # 今日消耗 = 当前累计已用 − 当日基线（credits_used 为终身累计、单调不减）
+        if st.get("ok") and st.get("credits_used") is not None:
+            used = float(st["credits_used"])
+            daily.setdefault("baselines", {})
+            if name not in daily["baselines"]:
+                daily["baselines"][name] = used  # 今天首次见到该平台，定基线
+            st["today_consumed"] = max(0.0, round(used - daily["baselines"][name], 4))
+            daily["last_used"][name] = used
+            used_today[name] = st["today_consumed"]
+        else:
+            st["today_consumed"] = None  # 未配置 / 读取失败，无法统计
+            if st.get("credits_used") is not None:
+                daily.setdefault("last_used", {})[name] = float(st["credits_used"])
         if st.get("ok") and st.get("checked_in_today"):
             st["today_checkin"] = today_checkin_info(name)  # None = 在官方客户端完成，历史无记录
         st["next_pack"] = next_consumed_pack(st.get("packages"))
         st["priority_rule"] = PRIORITY_RULES.get(name)
+    save_daily(daily)
+    total_today = round(sum(v for v in used_today.values() if v), 4)
+    out["today_consumed"] = {
+        "total": total_today,
+        "by_platform": {k: round(v, 4) for k, v in used_today.items()},
+    }
     STATE_PATH.write_text(json.dumps(out, ensure_ascii=False, indent=1))
     return out
 

@@ -29,6 +29,16 @@
   .stat .value { font-size: 34px; font-weight: 700; }
   .stat .value small { font-size: 14px; color: var(--muted); font-weight: 400; }
   .stat .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .consume-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px 24px; margin-bottom: 20px; }
+  .consume-card .title { font-size: 15px; color: var(--muted); margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .consume-card .title b { color: var(--text); font-size: 17px; font-weight: 700; }
+  .consume-bar { display: flex; height: 28px; border-radius: 9px; overflow: hidden; background: var(--card2); }
+  .consume-seg { height: 100%; transition: width .4s; min-width: 0; }
+  .consume-legend { display: flex; flex-wrap: wrap; gap: 14px 22px; margin-top: 14px; font-size: 14px; }
+  .consume-legend .item { display: flex; align-items: center; gap: 8px; }
+  .consume-legend .sw { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+  .consume-legend b { color: var(--text); }
+  .consume-legend .pct { color: var(--muted); }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 13px; }
   .card-head { display: flex; align-items: center; justify-content: space-between; }
@@ -115,6 +125,17 @@
       <div class="value" style="font-size:22px" id="sum-expiry">—</div>
       <div class="sub" id="sum-expiry-sub"></div>
     </div>
+    <div class="stat">
+      <div class="label">今日总消耗积分</div>
+      <div class="value" id="sum-today">—</div>
+      <div class="sub" id="sum-today-sub"></div>
+    </div>
+  </div>
+
+  <div class="consume-card" id="consume-card">
+    <div class="title">今日三平台积分消耗占比　<b id="consume-total">—</b></div>
+    <div class="consume-bar" id="consume-bar"></div>
+    <div class="consume-legend" id="consume-legend"></div>
   </div>
 
   <div class="grid" id="cards"></div>
@@ -226,6 +247,9 @@ function render() {
           <div class="usage-text">已用 <b>${fmt(used)}</b> · 剩 <b>${fmt(p.credits_remain)}</b> / 共 ${fmt(total)}（已用 ${pct}%）</div>
         </div>`;
       }
+      if (p.today_consumed != null && p.today_consumed > 0) {
+        inner += `<div class="row"><span>今日已消耗</span><b style="color:var(--amber)">${fmt(p.today_consumed)}</b></div>`;
+      }
       if (p.activity_name) inner += `<div class="row"><span>签到活动</span><b>${p.activity_name}${p.activity_end ? ' · ' + p.activity_end + ' 截止' : ''}</b></div>`;
       if (Array.isArray(p.packages) && p.packages.length) {
         const nextPk = p.next_pack;
@@ -276,6 +300,26 @@ function render() {
     : 'WorkBuddy + TRAE + Qoder';
   el('sum-checkin').textContent = checkable ? `${checked} / ${checkable}` : '—';
   el('sum-checkin-sub').textContent = checkable ? (checked === checkable ? '全部完成 ✓' : '还有平台未签到') : '';
+  // 今日总消耗积分 + 三平台占比
+  const tc = status ? status.today_consumed : null;
+  const tcTotal = tc ? (Number(tc.total) || 0) : 0;
+  el('sum-today').innerHTML = tcTotal > 0 ? `${fmt(tcTotal)} <small>credits</small>` : '0';
+  el('sum-today-sub').textContent = tcTotal > 0 ? '按当日用量基线差值统计' : '今日暂无消耗';
+  const cbar = el('consume-bar'), cleg = el('consume-legend');
+  cbar.innerHTML = ''; cleg.innerHTML = '';
+  if (tc && tc.by_platform && tcTotal > 0) {
+    for (const [key, meta] of Object.entries(PLATFORMS)) {
+      const val = Number(tc.by_platform[key]) || 0;
+      if (val <= 0) continue;
+      const pct = Math.max(1, Math.round(val / tcTotal * 100));
+      cbar.innerHTML += `<div class="consume-seg" style="width:${pct}%; background:${meta.color}" title="${meta.name} ${fmt(val)} (${pct}%)"></div>`;
+      cleg.innerHTML += `<div class="item"><span class="sw" style="background:${meta.color}"></span><b>${meta.name}</b><span class="pct">${fmt(val)} · ${pct}%</span></div>`;
+    }
+    el('consume-total').textContent = `${fmt(tcTotal)} credits`;
+  } else {
+    cleg.innerHTML = '<span class="pct">今日暂无积分消耗记录</span>';
+    el('consume-total').textContent = '0 credits';
+  }
   if (soonest !== null) {
     el('sum-expiry').textContent = `${soonest} 天后`;
     el('sum-expiry-sub').textContent = expiring7.length
