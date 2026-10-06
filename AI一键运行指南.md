@@ -179,35 +179,76 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
 
 ---
 
-## 7. 安装每日自动签到（09:30，可选）
+## 7. 安装自动签到 + 开机自启服务（推荐，设一次彻底免操作）
 
-> ⚠️ 项目里自带的 `com.user.checkin-panel.plist` 是**机器特定**文件（写死了原作者的用户名和 `/opt/homebrew/bin/python3`），**不要直接 `cp` 到别处**。其他用户请用下面的脚本**按当前机器动态生成**，它会自动用 `$HOME` 和本机 `python3` 路径。
+安装两个 launchd 任务：
+
+1. **每日 09:30 自动签到**：到点自动跑 `server.py --checkin-now`，连网页都不用开。
+2. **服务开机自启并常驻**：登录后自动启动 `server.py`，网页 `http://127.0.0.1:8787` 永远可访问。
+
+> ⚠️ 项目自带的 `com.user.checkin-panel.plist` 写死了原作者的用户名和 python 路径，**不要直接 `cp`**。下面脚本按当前机器动态生成。
+> 注意：部分新版 macOS 上 `launchctl load` 已失效（报 I/O error）。其实只要 plist 放进 `~/Library/LaunchAgents/`，**下次登录会自动加载**，不一定需要手动 bootstrap；想立刻生效就在本机终端跑下面的 bootstrap 命令。
 
 ```bash
-PY=$(command -v python3)   # 自动取本机 python3（Apple Silicon/Intel/系统自带均可）
+PY=$(command -v python3)
+AGENTS="$HOME/Library/LaunchAgents"
 PLIST_SRC="$PROJECT_DIR/com.user.checkin-panel.plist"
-PLIST_DST="$HOME/Library/LaunchAgents/com.user.checkin-panel.plist"
+CHECKIN_DST="$AGENTS/com.user.checkin-panel.plist"
+SERVER_DST="$AGENTS/com.user.checkin-panel.server.plist"
 
-# 用项目自带 plist 作模板，替换其中的用户名路径与 python 路径，生成当前机器可用的版本
+# 1) 每日自动签到 plist（基于项目模板替换本机路径）
 sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DIR#g" \
     -e "s#/opt/homebrew/bin/python3#$PY#g" \
-    "$PLIST_SRC" > "$PLIST_DST"
+    "$PLIST_SRC" > "$CHECKIN_DST"
 
-launchctl load "$PLIST_DST"
+# 2) 服务开机自启 plist（RunAtLoad + KeepAlive）
+cat > "$SERVER_DST" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.checkin-panel.server</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>PY</string>
+        <string>PROJ/server.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/checkin-panel-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/checkin-panel-server.log</string>
+</dict>
+</plist>
+EOF
+sed -i '' -e "s#PY#$PY#g" -e "s#PROJ#$PROJECT_DIR#g" "$SERVER_DST"
+
+# 3) 立即生效（需在本机 GUI 会话的终端里执行；若报 I/O error 就注销/重启一次，plist 会自动加载）
+UID=$(id -u)
+launchctl bootstrap "gui/$UID" "$CHECKIN_DST" 2>/dev/null || echo "checkin bootstrap 失败：请在本机终端执行，或注销后自动生效"
+launchctl bootstrap "gui/$UID" "$SERVER_DST" 2>/dev/null || echo "server bootstrap 失败：请在本机终端执行，或注销后自动生效"
 ```
 
 校验：
 
 ```bash
 launchctl list | grep checkin-panel
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8787/
 cat /tmp/checkin-panel.log
 ```
 
 卸载：
 
 ```bash
-launchctl unload "$HOME/Library/LaunchAgents/com.user.checkin-panel.plist"
-rm "$HOME/Library/LaunchAgents/com.user.checkin-panel.plist"
+UID=$(id -u)
+launchctl bootout "gui/$UID/com.user.checkin-panel" 2>/dev/null
+launchctl bootout "gui/$UID/com.user.checkin-panel.server" 2>/dev/null
+rm "$HOME/Library/LaunchAgents/com.user.checkin-panel.plist" \
+   "$HOME/Library/LaunchAgents/com.user.checkin-panel.server.plist"
 ```
 
 ---

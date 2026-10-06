@@ -24,22 +24,44 @@ python3 server.py
 
 ## 自动签到（每天定时，无需开面板）
 
+### 方式一：每天 09:30 自动签到（连网页都不用开）
+
 ```bash
-# 安装（每天 09:30 自动执行一次签到并记录结果）
-# 注意：自带的 plist 写死了原作者的用户名和 python 路径，换电脑请用下面命令按本机重新生成
+# 自带的 plist 写死了原作者的用户名和 python 路径，换电脑请用下面命令按本机重新生成
 PY=$(command -v python3)
 sed -e "s#/Users/honghonghuan/.zcode/workspace/default/checkin-panel#$PROJECT_DIR#g" \
     -e "s#/opt/homebrew/bin/python3#$PY#g" \
     com.user.checkin-panel.plist > ~/Library/LaunchAgents/com.user.checkin-panel.plist
-launchctl load ~/Library/LaunchAgents/com.user.checkin-panel.plist
-
+# 立刻生效（新版 macOS 用 bootstrap；load 可能报 I/O error）
+UID=$(id -u)
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.plist 2>/dev/null || echo "请在本机终端执行，或注销后自动生效"
 # 查看日志
 cat /tmp/checkin-panel.log
-
-# 卸载（如不再需要）
-launchctl unload ~/Library/LaunchAgents/com.user.checkin-panel.plist
+# 卸载
+launchctl bootout "gui/$UID/com.user.checkin-panel" 2>/dev/null
 rm ~/Library/LaunchAgents/com.user.checkin-panel.plist
 ```
+
+### 方式二：服务开机自启（登录后网页永远可访问，不用手动起服务）
+
+```bash
+PY=$(command -v python3)
+cat > ~/Library/LaunchAgents/com.user.checkin-panel.server.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.user.checkin-panel.server</string>
+  <key>ProgramArguments</key><array><string>$PY</string><string>$PROJECT_DIR/server.py</string></array>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/checkin-panel-server.log</string>
+  <key>StandardErrorPath</key><string>/tmp/checkin-panel-server.log</string>
+</dict></plist>
+EOF
+UID=$(id -u)
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.server.plist 2>/dev/null || echo "请在本机终端执行，或注销后自动生效"
+```
+
+> 小提示：plist 放进 `~/Library/LaunchAgents/` 后，**下次登录会自动加载**，不手动 bootstrap 也行（直接注销/重启一次最省事）。
 
 另外：打开面板页面时，如有平台当天未签到会**自动补签**。
 
