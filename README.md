@@ -1,6 +1,6 @@
 # AI 积分签到面板（WorkBuddy / TRAE / Qoder）
 
-本地 Web 面板：一个页面一键签到三个平台，显示各平台剩余积分、资源包明细和到期时间。
+本地 Web 面板：一个页面一键签到三个平台，显示各平台剩余积分、资源包明细、到期时间，以及**今日总消耗积分**与**三平台消耗占比**（基于每日用量基线差值统计）。
 
 ## 启动
 
@@ -73,7 +73,7 @@ launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.user.checkin-panel.ser
 - `index.html` — 前端页面
 - `link.svg` — 页面 favicon（链接图标；由原 `苹果.svg` 替换而来，服务端仅白名单放行此文件，避免泄露 `config.json` 等同目录密钥）
 - `config.json` — 凭据保存处（权限 600，仅本机可读；请勿外传）
-- `history.json` — 签到历史；`last_status.json` — 最近一次状态缓存
+- `history.json` — 签到历史；`last_status.json` — 最近一次状态缓存；`daily_baseline.json` — 每日消耗基线（用于统计今日总消耗，运行时生成）
 
 ## ⚠️ 风险提示
 
