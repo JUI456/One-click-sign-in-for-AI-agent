@@ -728,6 +728,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(json.loads(HISTORY_PATH.read_text()))
             except Exception:
                 self._json([])
+        elif self.path == "/link.svg":
+            # 仅放行此公有图标；config.json/history.json 等同目录机密文件绝不暴露
+            p = BASE_DIR / "link.svg"
+            if p.is_file():
+                self._send(200, p.read_bytes(), "image/svg+xml")
+            else:
+                self._json({"error": "not found"}, 404)
         else:
             self._json({"error": "not found"}, 404)
 
