@@ -58,9 +58,9 @@ echo $! > server.pid
 sleep 1.5
 ```
 
-> 默认常驻。若要**轻量模式**（空闲自动关、平时不占资源、不耗电），改用：
-> `nohup python3 server.py --idle-shutdown 30 > server.log 2>&1 &`
-> 轻量模式下，浏览器关闭约 30 分钟后服务自动退出；也可在网页点「⏻ 停止服务」立即关。
+> 默认常驻。若要**轻量模式**（关标签页即停、平时不占资源、不耗电），改用：
+> `nohup python3 server.py --idle-shutdown 1 > server.log 2>&1 &`
+> 轻量模式下，网页可见时心跳保活，**关闭/隐藏标签页约 1 分钟后服务自动退出**（刷新不会误杀）；也可在网页点「⏻ 停止服务」立即关。
 
 判定服务已起：
 
@@ -122,7 +122,7 @@ curl -s http://127.0.0.1:8787/api/history | python3 -m json.tool
 | `needs_pat` | `true` 表示 Qoder 缺 PAT |
 | `checked_in_today` | 当天是否已签 |
 | `ok` | 本次拉取是否成功 |
-| `mode` | 运行模式：`{"idle_timeout": 秒, "resident": true/false}`。`idle_timeout>0` 为轻量模式（空闲自动关），`resident:true` 为常驻 |
+| `mode` | 运行模式：`{"idle_timeout": 秒, "resident": true/false}`。`idle_timeout>0` 为轻量模式（关标签页即停，空闲超过该秒数自动关），`resident:true` 为常驻 |
 
 ---
 
@@ -188,6 +188,7 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
 |---|---|
 | `POST /api/shutdown` | 优雅停止服务（轻量模式的“关”开关；停止后需重新启动才能访问） |
 | `GET /api/info` | 返回 `{"idle_timeout": 秒, "resident": bool, "uptime": 秒}` |
+| `GET /api/heartbeat` | 心跳保活（前端页面可见时每 15 秒上报一次），仅刷新 `LAST_ACTIVITY`；用于轻量模式“关标签页即停” |
 | `/api/status` 的 `mode` 字段 | 同上 `idle_timeout` / `resident`，便于前端展示当前模式 |
 
 ---
@@ -197,7 +198,7 @@ curl -s -X POST http://127.0.0.1:8787/api/config \
 安装两个 launchd 任务（**默认轻量模式，不常驻**）：
 
 1. **每日 09:30 自动签到**：到点自动跑 `server.py --checkin-now`，连网页都不用开。
-2. **服务每天 09:32 轻量自启**：自动起一次服务（`--idle-shutdown 60`，约 1 小时后自动关），方便早上看一眼当天结果；平时不在后台常驻。
+2. **服务每天 09:32 轻量自启**：自动起一次服务（`--idle-shutdown 1`，关标签页即停：关闭/隐藏网页约 1 分钟自动关），方便早上看一眼当天结果；平时不在后台常驻。
 
 > ⚠️ 项目自带的 `com.user.checkin-panel.plist` / `com.user.checkin-panel.server.plist` 写死了原作者的用户名和 python 路径，**不要直接 `cp`**。下面脚本按当前机器动态生成。
 > **激活方式（实测）**：在本机 macOS 上，`launchctl bootstrap` 与 `launchctl load` 注册到 `gui/$UID` 都会报 `Bootstrap failed: 5: Input/output error`（即使 plist 经 `plutil -lint` 校验合法）。**不要依赖 bootstrap**——把 plist 放进 `~/Library/LaunchAgents/` 后，**注销并重新登录（或重启）一次**，macOS 会自动加载，最可靠。下面的 bootstrap 命令仅在你本机不报该错误时才需要。

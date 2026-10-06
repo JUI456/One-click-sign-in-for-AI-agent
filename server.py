@@ -3,7 +3,7 @@
 
 用法:
   python3 server.py                          # 启动 Web 面板 (默认 http://127.0.0.1:8787，常驻)
-  python3 server.py --idle-shutdown 30       # 轻量模式：启动后空闲 30 分钟自动关闭（平时不常驻）
+  python3 server.py --idle-shutdown 1        # 轻量模式：关标签页即停（空闲 1 分钟自动关闭，平时不常驻；刷新不会误杀）
   python3 server.py --open                   # 启动并自动打开浏览器
   python3 server.py --resident               # 显式常驻（同默认）
   python3 server.py --checkin-now            # 无界面执行一次签到(供定时任务调用)后退出
@@ -800,6 +800,12 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/info":
             self._json({"idle_timeout": IDLE_TIMEOUT, "resident": RESIDENT,
                         "uptime": int(time.time() - BOOT_TIME) if BOOT_TIME else 0})
+        elif self.path == "/api/heartbeat":
+            # 心跳：页面“可见”时定期上报（见 index.html），保持轻量模式服务存活。
+            # 标签页隐藏/关闭后心跳停止上报，服务端在空闲阈值（--idle-shutdown）后自动关停，
+            # 从而实现“关标签页即停”；刷新页面会立即重新上报，重载间隙 < 空闲阈值，不会误杀。
+            LAST_ACTIVITY["t"] = time.time()
+            self._json({"ok": True})
         else:
             self._json({"error": "not found"}, 404)
 

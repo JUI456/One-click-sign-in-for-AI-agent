@@ -9,7 +9,7 @@
         <string>/opt/homebrew/bin/python3</string>
         <string>/Users/honghonghuan/.zcode/workspace/default/checkin-panel/server.py</string>
         <string>--idle-shutdown</string>
-        <string>60</string>
+        <string>1</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>

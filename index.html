@@ -29,22 +29,25 @@
   .stat .value { font-size: 34px; font-weight: 700; }
   .stat .value small { font-size: 14px; color: var(--muted); font-weight: 400; }
   .stat .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
-  /* 三平台消耗占比：内嵌在「今日总消耗积分」卡片右侧，小尺寸展示 */
+  /* 三平台消耗占比：内嵌在「今日总消耗积分」卡片右侧，每个平台单独一行 */
   .stat-consume { display: flex; gap: 14px; }
   .stat-consume .value { font-size: 27px; }
   .consume-main { flex: 1; min-width: 0; }
-  .consume-mini { width: 132px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
-  .consume-bar { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--card2); }
-  .consume-seg { height: 100%; min-width: 0; transition: flex-grow .4s; }
-  .consume-legend { display: flex; flex-direction: column; gap: 4px; font-size: 11px; line-height: 1.3; }
-  .consume-legend .item { display: flex; align-items: center; gap: 6px; cursor: default; }
-  .consume-legend .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-  .consume-legend b { color: var(--text); font-weight: 600; }
-  .consume-legend .pct { color: var(--muted); margin-left: auto; }
+  .consume-mini { width: 148px; flex-shrink: 0; display: flex; flex-direction: column; justify-content: center; }
+  .consume-list { display: flex; flex-direction: column; gap: 8px; }
+  .consume-item { display: flex; flex-direction: column; gap: 3px; }
+  .ci-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; line-height: 1.3; }
+  .ci-head .nm { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+  .ci-head .sw { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .ci-head b { color: var(--text); font-weight: 600; }
+  .ci-bar { height: 5px; border-radius: 3px; background: var(--card2); overflow: hidden; }
+  .ci-bar > div { height: 100%; border-radius: 3px; transition: width .4s; }
+  .ci-val { font-size: 10px; color: var(--muted); line-height: 1.2; }
   @media (max-width: 1280px) {
     .stat-consume { flex-direction: column; gap: 12px; }
     .consume-mini { width: 100%; }
-    .consume-legend { flex-direction: row; flex-wrap: wrap; gap: 4px 16px; }
+    .consume-list { flex-direction: row; gap: 16px; }
+    .consume-item { flex: 1; min-width: 0; }
   }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 18px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 13px; }
@@ -140,8 +143,7 @@
         <div class="sub" id="sum-today-sub"></div>
       </div>
       <div class="consume-mini">
-        <div class="consume-bar" id="consume-bar"></div>
-        <div class="consume-legend" id="consume-legend"></div>
+        <div class="consume-list" id="consume-list"></div>
       </div>
     </div>
   </div>
@@ -318,19 +320,20 @@ function render() {
   const tc = status ? status.today_consumed : null;
   const tcTotal = tc ? (Number(tc.total) || 0) : 0;
   el('sum-today').innerHTML = tcTotal > 0 ? `${fmt(tcTotal)} <small>credits</small>` : '0';
-  el('sum-today-sub').textContent = tcTotal > 0 ? '按当日用量基线差值统计' : '今日暂无消耗';
-  const cbar = el('consume-bar'), cleg = el('consume-legend');
-  cbar.innerHTML = ''; cleg.innerHTML = '';
-  if (tc && tc.by_platform && tcTotal > 0) {
-    for (const [key, meta] of Object.entries(PLATFORMS)) {
-      const val = Number(tc.by_platform[key]) || 0;
-      if (val <= 0) continue;
-      const pct = Math.round(val / tcTotal * 100);
-      cbar.innerHTML += `<div class="consume-seg" style="flex-grow:${val}; background:${meta.color}" title="${meta.name} ${fmt(val)} (${pct}%)"></div>`;
-      cleg.innerHTML += `<div class="item" title="${meta.name} 今日消耗 ${fmt(val)} credits（${pct}%）"><span class="sw" style="background:${meta.color}"></span><b>${meta.name}</b><span class="pct">${pct}%</span></div>`;
-    }
-  } else {
-    cleg.innerHTML = '<span class="pct" style="margin:0">今日暂无消耗</span>';
+  el('sum-today-sub').textContent = tcTotal > 0 ? '按基线差值统计' : '今日暂无消耗';
+  const list = el('consume-list');
+  list.innerHTML = '';
+  const bp = (tc && tc.by_platform) || {};
+  for (const [key, meta] of Object.entries(PLATFORMS)) {
+    // 三个平台固定各占一行；未配置/读取失败的平台没有数据，如实显示 —
+    const available = Object.prototype.hasOwnProperty.call(bp, key) && bp[key] != null;
+    const val = available ? Number(bp[key]) : null;
+    const pct = available && tcTotal > 0 ? Math.round(val / tcTotal * 100) : 0;
+    list.innerHTML += `<div class="consume-item">
+      <div class="ci-head"><span class="nm"><span class="sw" style="background:${meta.color}"></span>${meta.name}</span><b>${available ? pct + '%' : '—'}</b></div>
+      <div class="ci-bar"><div style="width:${pct}%;background:${meta.color}"></div></div>
+      <div class="ci-val">${available ? fmt(val) + ' credits' : '未配置'}</div>
+    </div>`;
   }
   if (soonest !== null) {
     el('sum-expiry').textContent = `${soonest} 天后`;
@@ -511,6 +514,18 @@ refresh().then(() => {
   if (need) checkinAll('auto');
 });
 setInterval(refresh, 5 * 60 * 1000);
+
+// 心跳：轻量模式下保持服务存活，实现“关标签页即停”。
+// 仅在页面可见时每 15 秒上报一次；标签页隐藏/关闭后停止上报，服务端在空闲阈值后自动关停。
+// 页面加载即上报一次（缩短刷新后的存活间隙），并在 visibilitychange 时补报，保证刷新不会误杀。
+function heartbeat() {
+  if (document.visibilityState === 'visible') {
+    fetch('/api/heartbeat', {cache: 'no-store'}).catch(() => {});
+  }
+}
+heartbeat();
+setInterval(heartbeat, 15 * 1000);
+document.addEventListener('visibilitychange', heartbeat);
 </script>
 </body>
 </html>
