@@ -89,13 +89,20 @@
   .msg.err { background: rgba(240,86,79,.12); color: var(--red); display: block; }
   .empty { color: var(--muted); font-size: 14px; background: var(--card2); border-radius: 9px; padding: 12px 14px; line-height: 1.7; }
   .empty code { background: #000; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-  dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: min(560px, 92vw); }
+  dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: min(580px, 92vw); position: fixed; inset: 0; margin: auto; max-height: 85vh; overflow-y: auto; }
   dialog::backdrop { background: rgba(0,0,0,.6); }
-  dialog h2 { font-size: 17px; margin-bottom: 14px; }
-  dialog label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
-  dialog input, dialog select { width: 100%; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
-  dialog .hint { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 6px; background: var(--card2); border-radius: 8px; padding: 10px 12px; }
-  dialog .actions { display: flex; gap: 10px; margin-top: 18px; justify-content: flex-end; }
+  dialog h2 { font-size: 18px; margin-bottom: 20px; }
+  dialog .cfg-section { background: var(--card2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+  dialog .cfg-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  dialog .cfg-dot { width: 10px; height: 10px; border-radius: 50%; }
+  dialog .cfg-section-head b { font-size: 15px; font-weight: 600; }
+  dialog .cfg-section-head small { color: var(--muted); font-size: 12px; margin-left: auto; }
+  dialog label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  dialog input, dialog select { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 9px 12px; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  dialog .hint { font-size: 12px; color: var(--muted); line-height: 1.7; margin-top: 8px; }
+  dialog .btn-clear { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; padding: 2px 0; margin-top: 6px; opacity: .8; }
+  dialog .btn-clear:hover { opacity: 1; text-decoration: underline; }
+  dialog .actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
   .history { margin-top: 26px; }
   .history h3 { font-size: 15px; margin-bottom: 10px; color: var(--muted); }
   .history-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
@@ -158,25 +165,44 @@
 </div>
 
 <dialog id="settings">
-  <h2>设置</h2>
-  <label>TRAE 会话串（备用，通常不用填）</label>
-  <input id="cfg-trae" type="password" placeholder="TRAE 失效时优先点卡片上的「重新登录（自动获取）」">
-  <div class="hint">
-    推荐走自动获取：点 TRAE 卡片上的「🔄 重新登录」，在弹出页面正常登录即可，面板自动拿到新凭据。
-    仅当自动获取失败时，才用这里：浏览器登录 <b>trae.cn</b> → F12 → Application → Cookies → 复制
-    <code>X-Cloudide-Session</code> 的值粘贴到上面（约 14 天有效）。
+  <h2>凭据设置</h2>
+
+  <div class="cfg-section">
+    <div class="cfg-section-head">
+      <span class="cfg-dot" style="background:var(--blue)"></span>
+      <b>WorkBuddy</b>
+      <small>零维护，无需配置</small>
+    </div>
+    <div class="hint">自动读取本机 WorkBuddy 客户端凭据，保持登录即可。</div>
   </div>
-  <label>Qoder PAT（一年录一次）</label>
-  <input id="cfg-qoder" type="password" placeholder="点 Qoder 卡片上的「打开令牌页面」创建后粘贴到这里">
-  <div class="hint">
-    点 Qoder 卡片上的「🔗 打开令牌页面」→ 登录 → 「新建令牌」→ 复制粘贴到上面 → 保存。
-    （区域保持 china 即国内版）
+
+  <div class="cfg-section">
+    <div class="cfg-section-head">
+      <span class="cfg-dot" style="background:var(--red)"></span>
+      <b>TRAE</b>
+      <small>约 14 天过期</small>
+    </div>
+    <label>会话串（备用手动录入）</label>
+    <input id="cfg-trae" type="password" placeholder="通常无需填写，优先用卡片上的自动获取">
+    <button class="btn-clear" onclick="clearCreds('trae')">清除 TRAE 凭据</button>
+    <div class="hint">失效时优先点 TRAE 卡片上的「🔄 重新登录」自动获取。仅自动失败时：登录 trae.cn → F12 → Cookies → 复制 <code>X-Cloudide-Session</code> 粘贴到这里。</div>
   </div>
-  <label>区域</label>
-  <select id="cfg-region"><option value="china">国内版 (china)</option><option value="global">国际版 (global)</option></select>
+
+  <div class="cfg-section">
+    <div class="cfg-section-head">
+      <span class="cfg-dot" style="background:var(--purple)"></span>
+      <b>Qoder</b>
+      <small>一年录一次</small>
+    </div>
+    <label>PAT 令牌</label>
+    <input id="cfg-qoder" type="password" placeholder="点卡片上的「打开令牌页面」创建后粘贴到这里">
+    <label>区域</label>
+    <select id="cfg-region"><option value="china">国内版 (china)</option><option value="global">国际版 (global)</option></select>
+    <button class="btn-clear" onclick="clearCreds('qoder')">清除 Qoder 凭据</button>
+    <div class="hint">点 Qoder 卡片上的「🔗 打开令牌页面」→ 登录 → 新建令牌 → 复制粘贴到上面保存。</div>
+  </div>
+
   <div class="actions">
-    <button class="btn-ghost" onclick="clearCreds('trae')">清除 TRAE</button>
-    <button class="btn-ghost" onclick="clearCreds('qoder')">清除 Qoder</button>
     <button class="btn-ghost" onclick="document.getElementById('settings').close()">取消</button>
     <button class="btn-main" onclick="saveSettings()">保存</button>
   </div>
@@ -216,8 +242,8 @@ function render() {
   let modeTxt = '';
   if (status && status.mode) {
     modeTxt = status.mode.resident
-      ? ' · 常驻模式'
-      : (status.mode.idle_timeout ? ` · 轻量模式(${Math.round(status.mode.idle_timeout / 60)}分钟空闲自动关)` : ' · 轻量模式');
+      ? ' · 🔒 常驻模式'
+      : (status.mode.idle_timeout ? ` · 🍃 轻量模式(${Math.round(status.mode.idle_timeout / 60)}分钟空闲自动关)` : ' · 🍃 轻量模式');
   }
   el('update-time').textContent = status ? ' · 更新于 ' + status.time + modeTxt : '';
   // 模式切换按钮：实时反映当前模式，点击在“轻量/常驻”间切换
