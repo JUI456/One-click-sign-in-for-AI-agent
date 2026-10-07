@@ -8,12 +8,15 @@
   python3 server.py --resident               # 显式常驻（同默认）
   python3 server.py --checkin-now            # 无界面执行一次签到(供定时任务调用)后退出
   python3 server.py --port 9000              # 指定端口
+
+监听 0.0.0.0，同一 WiFi 下的手机/平板可直接用 Mac 的局域网 IP 访问（启动时会打印该地址）。
 """
 
 import json
 import os
 import random
 import re
+import socket
 import ssl
 import sys
 import threading
@@ -57,6 +60,18 @@ LAST_ACTIVITY = {"t": 0}  # 最近一次客户端请求时间，用于空闲判�
 BOOT_TIME = 0
 RESIDENT = True
 LIGHTWEIGHT_IDLE_SECONDS = 60  # 轻量模式下“关标签页即停”的空闲阈值（秒），运行时切回轻量用此值
+
+
+def lan_ip():
+    """本机局域网 IP（仅做路由查询，不发数据包）；拿不到返回 None。"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 1))  # 保留地址，不会真的发包
+        return s.getsockname()[0]
+    except Exception:
+        return None
+    finally:
+        s.close()
 
 
 def today_str():
@@ -948,11 +963,15 @@ def main():
     IDLE_TIMEOUT = idle
     RESIDENT = resident or idle == 0  # 没给 --idle-shutdown 也没给 --resident → 默认常驻
     cfg = load_config()
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    # 监听所有网卡，同 WiFi 下的手机也能访问；凭据仍只在本机读取，页面不含 token
+    httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     LAST_ACTIVITY["t"] = time.time()
     BOOT_TIME = time.time()
     tag = f"轻量模式（空闲 {idle // 60} 分钟自动关闭）" if idle > 0 else "常驻模式"
     print(f"签到面板已启动: http://127.0.0.1:{port} · {tag}")
+    ip = lan_ip()
+    if ip:
+        print(f"手机/平板访问: http://{ip}:{port}（需与本机同一 WiFi；首次启动请在系统弹窗允许 Python 接收传入连接）")
     if open_browser:
         try:
             webbrowser.open(f"http://127.0.0.1:{port}/")
