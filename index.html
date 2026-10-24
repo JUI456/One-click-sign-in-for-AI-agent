@@ -312,8 +312,8 @@ function render() {
       // WorkBuddy 新版把本地 accessToken 改成静态加密信封（客户端密钥保护），
       // 面板只能读到密文，无法查额度也无法代签到 —— 说清原因与替代去处。
       inner += `<div class="msg err">未连上运行中的 WorkBuddy 客户端</div>
-        <div class="empty">面板会<b>自动拉起</b> WorkBuddy 客户端（约每 10 分钟尝试一次），客户端就绪后下次刷新即自动恢复。<br>
-        若长时间未恢复，请手动打开 WorkBuddy 并确认已登录；其余两个平台不受影响。</div>`;
+        <div class="empty">点「⚡ 一键签到」或本卡片的「WorkBuddy 签到」会<b>自动拉起</b> WorkBuddy 并完成签到，之后数据自动恢复（每天 09:30 定时签到同样会自动拉起）。<br>
+        也可以手动打开 WorkBuddy 后点「🔄 刷新」；其余两个平台不受影响。</div>`;
       card.innerHTML = inner; cards.appendChild(card); continue;
     }
     if (p.ok === false && key === 'qoder' && (p.needs_pat || p.configured === false)) {

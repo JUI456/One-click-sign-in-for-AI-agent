@@ -377,17 +377,12 @@ def _wb_expiry(item):
 def workbuddy_status(cfg=None):
     # 首选：借 WorkBuddy 客户端守护进程的本地 wbipc 服务转发认证请求
     #（5.8.3 起 accessToken 在本地加密存储，客户端自身是唯一可行的读取通道）
+    # 状态查询是被动展示：只使用现有服务，不主动拉起客户端
+    #（拉起仅在签到动作时发生，避免用户手动退出 WorkBuddy 后被面板反复弹起）
     res = wb_ipc_fetch_all([
         {"path": "/v2/billing/meter/checkin-activity-status", "method": "POST", "body": b"{}"},
         {"path": "/v2/billing/meter/get-user-resource", "method": "POST", "body": b"{}"},
     ])
-    if res is None and (cfg or load_config()).get("wb_auto_launch", True):
-        # 自愈：客户端未运行时自动拉起，就绪后重试一次
-        if wb_ensure_client(wait_s=12):
-            res = wb_ipc_fetch_all([
-                {"path": "/v2/billing/meter/checkin-activity-status", "method": "POST", "body": b"{}"},
-                {"path": "/v2/billing/meter/get-user-resource", "method": "POST", "body": b"{}"},
-            ])
     if res and res[0][0] == 200:
         act = {}
         if isinstance(res[0][1], dict) and res[0][1].get("code") == 0:

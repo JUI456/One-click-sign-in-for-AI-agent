@@ -85,7 +85,7 @@ python3 server.py
 
 | 平台 | 凭据 | 维护成本 |
 |---|---|---|
-| WorkBuddy | 自动 | **近乎零维护（自愈）**：面板通过本机运行的 WorkBuddy 客户端**本地服务**（wbipc，`~/.workbuddy/wbipc/endpoint.json`）代发认证请求查询额度与签到；客户端没运行时面板会**自动拉起它**再重试（10 分钟节流防循环，`config.json` 的 `wb_auto_launch` 可关）。5.8.3 起本地凭据已加密，wbipc 是唯一可行通道；旧版客户端则回退为直接读取明文凭据 |
+| WorkBuddy | 自动 | **近乎零维护（自愈）**：面板通过本机运行的 WorkBuddy 客户端**本地服务**（wbipc，`~/.workbuddy/wbipc/endpoint.json`）代发认证请求查询额度与签到；客户端没运行时，**签到动作**（一键签到/定时任务）会自动拉起它再重试（10 分钟节流；纯状态查看不拉起，避免手动退出客户端后被反复弹起；`config.json` 的 `wb_auto_launch` 可整体关闭）。5.8.3 起本地凭据已加密，wbipc 是唯一可行通道；旧版客户端则回退为直接读取明文凭据 |
 | TRAE | X-Cloudide-Session | **近乎零维护**：登录失效时卡片出现「🔄 重新登录（自动获取）」按钮 → 点它 → 在弹出页面正常登录 → 面板自动从 ZCode 浏览器的会话存储拿最新凭据（扫描 `~/Library/Application Support/ZCode` 下**全部** Cookies 库取最新有效会话，2026-10-19 起支持多库），无需复制粘贴。每天 09:30 的定时签到也会先尝试无感自愈 |
 | Qoder | PAT + 网页会话 | PAT **一年一次**（`qoder.cn/account/integrations`）；网页会话**约 7 天一过期**：过期后卡片出现灰色提示「🔄 重新登录（自动获取）」→ 在弹出的 qoder.cn 页面登录一次即可恢复逐包到期明细。**签到和总额度走 PAT，不受网页会话过期影响** |
 
@@ -95,7 +95,7 @@ python3 server.py
 
 - **WorkBuddy 客户端 5.8.3 加密了本地凭据**（`workbuddy-desktop.info` 的 `accessToken` 变成 `$wbEncrypted` 信封 + `~/.workbuddy/keyblob` 静态加密，密钥为构建期注入、不落盘）。实测结论：应用包内无明文密钥、钥匙串种子无法用标准 KDF 派生出保护密钥、日志里的 Bearer 令牌均为设备令牌（401）、各本地存储无明文 accessToken。面板因此降级为提示卡片，不再抛 `can only concatenate str (not "dict") to str`。同源项目（如 Gitee `one-click-sign-in-for-ai-agent`）同样未适配此格式，遇到同版本会报相同错误。
 - **WorkBuddy 恢复方案（同日落地）**：逆向了客户端的 wbipc 本地 IPC 协议（换行 JSON 分帧 + ticket HMAC 质询握手 + JSON-RPC），调用其 `wb.request/http.fetch` 管道代发认证请求——守护进程自动附带解密后的登录态，签到/额度/连签天数全部恢复。
-- **自愈增强（同日）**：① WorkBuddy 客户端未运行时，面板/定时签到自动执行 `open -a WorkBuddy` 拉起并等待就绪后重试（10 分钟节流，`wb_auto_launch` 可关）——09:30 定时签到从此无需客户端预先运行；② Qoder 网页会话剩 ≤3 天时卡片提前预警并给一键续期按钮（服务端固定 7 天过期、PAT 无法调网页明细接口，无法做到全自动续期，预警+一键是最接近无感的方案）；③ 用户在任何时候于 ZCode 内置浏览器登录 qoder.cn/trae.cn，面板在下次刷新（≤5 分钟）自动捕捉新会话。
+- **自愈增强（同日）**：① WorkBuddy 客户端未运行时，**签到动作**（一键签到 / 09:30 定时任务）自动执行 `open -a WorkBuddy` 拉起并等待就绪后重试（10 分钟节流，`wb_auto_launch` 可关）；纯状态查看不拉起客户端——定时签到从此无需客户端预先运行，也不会在你手动退出 WorkBuddy 后被反复弹起；② Qoder 网页会话剩 ≤3 天时卡片提前预警并给一键续期按钮（服务端固定 7 天过期、PAT 无法调网页明细接口，无法做到全自动续期，预警+一键是最接近无感的方案）；③ 用户在任何时候于 ZCode 内置浏览器登录 qoder.cn/trae.cn，面板在下次刷新（≤5 分钟）自动捕捉新会话。
 - **Qoder 网页会话（约 7 天）过期后的表现调整**：从红色报错改为灰色提示——签到（PAT）、总额度、⚡ 消耗预测（有明细时）仍正常，仅逐包到期明细隐藏；点「重新登录」恢复。PAT 令牌无法调用 qoder.cn 网页明细接口（实测 401），因此逐包明细只能依赖网页会话。
 
 ## TRAE 会话获取机制
