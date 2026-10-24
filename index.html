@@ -193,7 +193,7 @@
       <b>WorkBuddy</b>
       <small id="cfg-wb-expiry">零维护，无需配置</small>
     </div>
-    <div class="hint">自动读取本机 WorkBuddy 客户端凭据，保持登录即可。</div>
+    <div class="hint">通过本机运行的 WorkBuddy 客户端本地服务查询（客户端需保持登录运行）。</div>
   </div>
 
   <div class="cfg-section">
@@ -308,6 +308,14 @@ function render() {
         <div style="text-align:center"><a href="#" onclick="openSettings();return false" style="color:var(--muted);font-size:12px">手动粘贴（备用）</a></div>`;
       card.innerHTML = inner; cards.appendChild(card); continue;
     }
+    if (p.ok === false && key === 'workbuddy' && p.encrypted_token) {
+      // WorkBuddy 新版把本地 accessToken 改成静态加密信封（客户端密钥保护），
+      // 面板只能读到密文，无法查额度也无法代签到 —— 说清原因与替代去处。
+      inner += `<div class="msg err">未连上运行中的 WorkBuddy 客户端</div>
+        <div class="empty">面板会<b>自动拉起</b> WorkBuddy 客户端（约每 10 分钟尝试一次），客户端就绪后下次刷新即自动恢复。<br>
+        若长时间未恢复，请手动打开 WorkBuddy 并确认已登录；其余两个平台不受影响。</div>`;
+      card.innerHTML = inner; cards.appendChild(card); continue;
+    }
     if (p.ok === false && key === 'qoder' && (p.needs_pat || p.configured === false)) {
       // Qoder：引导到令牌页面创建，再粘贴一次（一年只需一次）
       inner += `<div class="msg err">${p.configured === false ? '还没录入 Qoder 令牌' : 'Qoder 令牌已失效'}</div>
@@ -324,6 +332,23 @@ function render() {
       inner += `<div class="msg err">${p.error || '未知错误'}</div>`;
     } else {
       if (p.checked_in_today !== null && p.checked_in_today !== undefined) { checkable++; if (p.checked_in_today) checked++; }
+      if (key === 'qoder' && p.needs_web_relogin) {
+        // 网页会话（约 7 天一过期）失效时逐包明细退回汇总额度。
+        // 签到和总额度仍正常（走 PAT），所以这里用灰色说明而不是红色报错，避免看起来像故障。
+        const reason = p.web_reason;
+        const txt = reason === 'expired'
+          ? 'Qoder 网页会话已过期（约 7 天一换）：逐包到期明细暂时隐藏，签到和总额度不受影响。点下方按钮重新登录后自动恢复。'
+          : (reason === 'no-cookie'
+            ? '未检测到 qoder.cn 网页登录态：签到和总额度正常；登录后可另显示逐包到期明细。'
+            : `逐包明细暂时不可用（${reason || '未知'}），签到和总额度不受影响。`);
+        inner += `<div class="empty">${txt}</div>
+          <div class="card-foot"><button class="btn-main" onclick="qoderRelogin(this)">🔄 重新登录（自动获取）</button></div>`;
+      }
+      if (key === 'qoder' && !p.needs_web_relogin && p.web_session_days_left != null && p.web_session_days_left <= 3) {
+        // 网页会话快到期（约 7 天一换）：提前预警并给一键续期，避免明细悄悄中断
+        inner += `<div class="empty">⏳ Qoder 网页会话约 ${Math.ceil(p.web_session_days_left)} 天后过期：提前点「续期」可避免逐包明细中断（签到与总额度不受影响）。</div>
+          <div class="card-foot"><button class="btn-ghost" onclick="qoderRelogin(this)">🔄 提前续期（重新登录）</button></div>`;
+      }
       inner += `<div class="row"><span>剩余积分</span><b style="font-size:18px">${fmt(p.credits_remain)}${p.streak_days != null ? ` · 连签 ${p.streak_days} 天` : ''}</b></div>`;
       if (p.credits_total > 0) {
         const used = Number(p.credits_used) || 0, total = Number(p.credits_total) || 0;
@@ -610,6 +635,32 @@ async function traeRelogin(btn) {
       clearInterval(_grabTimer);
       btn.disabled = false; btn.innerHTML = old;
       toast('等待超时：确认已在弹出页面完成登录；仍未生效可点「手动粘贴（备用）」', 6000);
+    }
+  }, 5000);
+}
+async function qoderRelogin(btn) {
+  const old = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>等待登录… 登录完成会自动获取';
+  window.open('https://qoder.cn', '_blank');
+  toast('已在弹出的页面打开 qoder.cn，登录成功（看到额度页面）后这里会自动恢复逐包明细');
+  clearInterval(_grabTimer);
+  let tries = 0;
+  _grabTimer = setInterval(async () => {
+    tries++;
+    try {
+      const r = await (await fetch('/api/grab_qoder', {method: 'POST'})).json();
+      if (r.ok) {
+        clearInterval(_grabTimer);
+        toast('✓ ' + r.message, 5000);
+        await refresh();
+        return;
+      }
+    } catch (e) {}
+    if (tries >= 60) {  // 5 秒 × 60 次 = 5 分钟
+      clearInterval(_grabTimer);
+      btn.disabled = false; btn.innerHTML = old;
+      toast('等待超时：确认已在弹出页面登录 qoder.cn；仍未生效可在设置里手动录入 PAT', 6000);
     }
   }, 5000);
 }
